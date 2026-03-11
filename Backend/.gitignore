@@ -1,3 +1,5 @@
 node_modules
 data/app-data.json
 .DS_Store
+reports
+README.md
