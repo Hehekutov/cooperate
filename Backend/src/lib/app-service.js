@@ -204,7 +204,9 @@ function buildIdeaPayload(state, idea, viewer) {
       decidedBy: director ? sanitizeUser(director) : null,
       comment: idea.directorComment,
       decidedAt: idea.directorDecisionAt,
-      approved: idea.status === IDEA_STATUSES.APPROVED_BY_DIRECTOR
+      approved: idea.directorDecisionAt
+        ? idea.status === IDEA_STATUSES.APPROVED_BY_DIRECTOR
+        : null
     },
     timeline: {
       createdAt: idea.createdAt,

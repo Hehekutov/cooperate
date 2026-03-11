@@ -86,20 +86,6 @@ async function createApp(options = {}) {
     };
   });
 
-  await app.register(authRoutes, { service, requireAuth });
-  await app.register(companyRoutes, { service, requireAuth });
-  await app.register(employeeRoutes, { service, requireAuth, requireRoles });
-  await app.register(ideaRoutes, { service, requireAuth, requireRoles });
-
-  app.setNotFoundHandler(async (_request, reply) => {
-    reply.code(404).send({
-      error: {
-        code: 'NOT_FOUND',
-        message: 'Route was not found'
-      }
-    });
-  });
-
   app.setErrorHandler(async (error, _request, reply) => {
     if (error instanceof AppError) {
       reply.code(error.statusCode).send({
@@ -129,6 +115,20 @@ async function createApp(options = {}) {
       error: {
         code: 'INTERNAL_SERVER_ERROR',
         message: 'Unexpected server error'
+      }
+    });
+  });
+
+  await app.register(authRoutes, { service, requireAuth });
+  await app.register(companyRoutes, { service, requireAuth });
+  await app.register(employeeRoutes, { service, requireAuth, requireRoles });
+  await app.register(ideaRoutes, { service, requireAuth, requireRoles });
+
+  app.setNotFoundHandler(async (_request, reply) => {
+    reply.code(404).send({
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Route was not found'
       }
     });
   });
