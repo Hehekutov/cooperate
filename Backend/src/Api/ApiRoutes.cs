@@ -1,6 +1,5 @@
 using Backend.Domain;
 using Backend.Services;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Backend.Api;
 
@@ -12,14 +11,16 @@ public static class ApiRoutes
     {
         var api = app.MapGroup("/api");
 
-        api.MapPost("/auth/register-company", async (RegisterCompanyRequest request, AppService service, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/register-company", async (HttpContext httpContext, AppService service, CancellationToken cancellationToken) =>
         {
+            var request = await RequestValidation.ReadRegisterCompanyAsync(httpContext.Request, cancellationToken);
             var result = await service.RegisterCompanyAsync(request, cancellationToken);
             return Results.Json(new { data = result }, statusCode: StatusCodes.Status201Created);
         });
 
-        api.MapPost("/auth/login", async (LoginRequest request, AppService service, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/login", async (HttpContext httpContext, AppService service, CancellationToken cancellationToken) =>
         {
+            var request = await RequestValidation.ReadLoginAsync(httpContext.Request, cancellationToken);
             var result = await service.LoginAsync(request, cancellationToken);
             return Results.Json(new { data = result });
         });
@@ -60,16 +61,18 @@ public static class ApiRoutes
             return Results.Json(new { data = result });
         });
 
-        api.MapPost("/employees", async (HttpContext httpContext, CreateEmployeeRequest request, AppService service, CancellationToken cancellationToken) =>
+        api.MapPost("/employees", async (HttpContext httpContext, AppService service, CancellationToken cancellationToken) =>
         {
             var context = await RequireRoleAsync(httpContext, service, [Roles.Director], cancellationToken);
+            var request = await RequestValidation.ReadCreateEmployeeAsync(httpContext.Request, cancellationToken);
             var result = await service.AddEmployeeAsync(context.User, request, cancellationToken);
             return Results.Json(new { data = result }, statusCode: StatusCodes.Status201Created);
         });
 
-        api.MapGet("/ideas", async (HttpContext httpContext, AppService service, [AsParameters] IdeaListQuery query, CancellationToken cancellationToken) =>
+        api.MapGet("/ideas", async (HttpContext httpContext, AppService service, CancellationToken cancellationToken) =>
         {
             var context = await RequireAuthAsync(httpContext, service, cancellationToken);
+            var query = RequestValidation.ReadIdeaListQuery(httpContext.Request.Query);
             var result = await service.ListIdeasAsync(context.User, query, cancellationToken);
             return Results.Json(new { data = result });
         });
@@ -81,30 +84,34 @@ public static class ApiRoutes
             return Results.Json(new { data = result });
         });
 
-        api.MapPost("/ideas", async (HttpContext httpContext, CreateIdeaRequest request, AppService service, CancellationToken cancellationToken) =>
+        api.MapPost("/ideas", async (HttpContext httpContext, AppService service, CancellationToken cancellationToken) =>
         {
             var context = await RequireAuthAsync(httpContext, service, cancellationToken);
+            var request = await RequestValidation.ReadCreateIdeaAsync(httpContext.Request, cancellationToken);
             var result = await service.CreateIdeaAsync(context.User, request, cancellationToken);
             return Results.Json(new { data = result }, statusCode: StatusCodes.Status201Created);
         });
 
-        api.MapPost("/ideas/{ideaId}/moderate", async (HttpContext httpContext, string ideaId, ModerateIdeaRequest request, AppService service, CancellationToken cancellationToken) =>
+        api.MapPost("/ideas/{ideaId}/moderate", async (HttpContext httpContext, string ideaId, AppService service, CancellationToken cancellationToken) =>
         {
             var context = await RequireRoleAsync(httpContext, service, [Roles.Admin, Roles.Director], cancellationToken);
+            var request = await RequestValidation.ReadModerateIdeaAsync(httpContext.Request, cancellationToken);
             var result = await service.ModerateIdeaAsync(context.User, ideaId, request, cancellationToken);
             return Results.Json(new { data = result });
         });
 
-        api.MapPost("/ideas/{ideaId}/vote", async (HttpContext httpContext, string ideaId, VoteIdeaRequest request, AppService service, CancellationToken cancellationToken) =>
+        api.MapPost("/ideas/{ideaId}/vote", async (HttpContext httpContext, string ideaId, AppService service, CancellationToken cancellationToken) =>
         {
             var context = await RequireAuthAsync(httpContext, service, cancellationToken);
+            var request = await RequestValidation.ReadVoteIdeaAsync(httpContext.Request, cancellationToken);
             var result = await service.VoteIdeaAsync(context.User, ideaId, request, cancellationToken);
             return Results.Json(new { data = result });
         });
 
-        api.MapPost("/ideas/{ideaId}/decision", async (HttpContext httpContext, string ideaId, DirectorDecisionRequest request, AppService service, CancellationToken cancellationToken) =>
+        api.MapPost("/ideas/{ideaId}/decision", async (HttpContext httpContext, string ideaId, AppService service, CancellationToken cancellationToken) =>
         {
             var context = await RequireRoleAsync(httpContext, service, [Roles.Director], cancellationToken);
+            var request = await RequestValidation.ReadDirectorDecisionAsync(httpContext.Request, cancellationToken);
             var result = await service.MakeDirectorDecisionAsync(context.User, ideaId, request, cancellationToken);
             return Results.Json(new { data = result });
         });
