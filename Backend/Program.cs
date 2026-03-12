@@ -4,18 +4,36 @@ using Backend.Domain;
 using Backend.Infrastructure;
 using Backend.Services;
 
-var builder = WebApplication.CreateBuilder(args);
-
 var appOptions = new AppOptions
 {
-    DataFile = builder.Configuration["DATA_FILE"] ?? Path.Combine(builder.Environment.ContentRootPath, "data/app-data.json"),
-    SessionTtlHours = ParseInt(builder.Configuration["SESSION_TTL_HOURS"], 24 * 7),
-    IdeaMonthlyLimit = ParseInt(builder.Configuration["IDEA_MONTHLY_LIMIT"], 3),
-    CorsOrigin = builder.Configuration["CORS_ORIGIN"] ?? "*"
+    DataFile = Environment.GetEnvironmentVariable("DATA_FILE") ?? Path.Combine(Directory.GetCurrentDirectory(), "data/app-data.json"),
+    SessionTtlHours = ParseInt(Environment.GetEnvironmentVariable("SESSION_TTL_HOURS"), 24 * 7),
+    IdeaMonthlyLimit = ParseInt(Environment.GetEnvironmentVariable("IDEA_MONTHLY_LIMIT"), 3),
+    CorsOrigin = Environment.GetEnvironmentVariable("CORS_ORIGIN") ?? "*"
 };
 
+var seedMode = args.Any(argument => string.Equals(argument, "seed", StringComparison.OrdinalIgnoreCase));
+
+if (seedMode)
+{
+    var seedStore = new FileStateStore(appOptions.DataFile);
+    await seedStore.EnsureAsync();
+
+    var seedService = new AppService(seedStore, appOptions);
+    await seedService.SeedDemoDataAsync();
+
+    Console.WriteLine($"Seed completed: {appOptions.DataFile}");
+    Console.WriteLine("Director: +70000000001 / director123");
+    Console.WriteLine("Admin:    +70000000002 / admin123");
+    Console.WriteLine("Employee: +70000000003 / employee123");
+    Console.WriteLine("Employee: +70000000004 / employee123");
+    return;
+}
+
+var builder = WebApplication.CreateBuilder(args);
+
 builder.Services.AddSingleton(appOptions);
-builder.Services.AddSingleton<FileStateStore>(sp => new FileStateStore(appOptions.DataFile));
+builder.Services.AddSingleton<FileStateStore>(_ => new FileStateStore(appOptions.DataFile));
 builder.Services.AddSingleton<AppService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -42,18 +60,6 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 var store = app.Services.GetRequiredService<FileStateStore>();
 await store.EnsureAsync();
-
-if (args.Any(argument => string.Equals(argument, "seed", StringComparison.OrdinalIgnoreCase)))
-{
-    var service = app.Services.GetRequiredService<AppService>();
-    await service.SeedDemoDataAsync();
-    Console.WriteLine($"Seed completed: {appOptions.DataFile}");
-    Console.WriteLine("Director: +70000000001 / director123");
-    Console.WriteLine("Admin:    +70000000002 / admin123");
-    Console.WriteLine("Employee: +70000000003 / employee123");
-    Console.WriteLine("Employee: +70000000004 / employee123");
-    return;
-}
 
 app.UseCors();
 app.Use(async (context, next) =>
