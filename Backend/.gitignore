@@ -1,5 +1,7 @@
 node_modules
 data/app-data.json
 .DS_Store
+bin
+obj
 reports
 README.md

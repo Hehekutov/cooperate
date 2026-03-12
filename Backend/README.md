@@ -1,6 +1,6 @@
 # Cooperate Backend
 
-Fastify backend for an internal company platform where employees create ideas, admins moderate them, coworkers vote, and the director makes the final decision.
+ASP.NET Core backend for an internal company platform where employees create ideas, admins moderate them, coworkers vote, and the director makes the final decision.
 
 ## What is implemented
 
@@ -18,38 +18,46 @@ Fastify backend for an internal company platform where employees create ideas, a
 - monthly rate limit: no more than 3 ideas per employee per UTC month
 - active and archive idea views
 - JSON-file persistence without external database dependencies
-- demo seed script and integration tests
+- seed mode built into the application
 
 ## Tech stack
 
-- Node.js 24+
-- Fastify 5
-- built-in `node:test` for integration tests
-- built-in filesystem storage in `data/app-data.json`
+- .NET 10 SDK
+- ASP.NET Core Minimal API
+- filesystem storage in `data/app-data.json`
+- no external database or third-party packages
 
 ## Run
 
 ```bash
-npm install
-npm run seed
-npm start
+dotnet build
+dotnet run
 ```
 
-The server starts on `http://0.0.0.0:3000` by default.
+The server starts on `http://localhost:5000` and `https://localhost:5001` by default.
 
-## Available scripts
+Quick local smoke check:
 
 ```bash
-npm start
-npm run dev
-npm run seed
-npm test
+./scripts/smoke-test.sh
 ```
+
+## Seed demo data
+
+```bash
+dotnet run -- seed
+```
+
+Seed credentials:
+
+- director: `+70000000001` / `director123`
+- admin: `+70000000002` / `admin123`
+- employee: `+70000000003` / `employee123`
+- employee: `+70000000004` / `employee123`
 
 ## Environment variables
 
-- `PORT` - HTTP port, default `3000`
-- `HOST` - HTTP host, default `0.0.0.0`
+- `ASPNETCORE_URLS` - bind address, example `http://0.0.0.0:3000`
 - `DATA_FILE` - path to the JSON storage file, default `data/app-data.json`
 - `CORS_ORIGIN` - allowed origin for browser requests, default `*`
 - `SESSION_TTL_HOURS` - token lifetime, default `168`
@@ -62,6 +70,10 @@ All authenticated endpoints expect:
 ```http
 Authorization: Bearer <token>
 ```
+
+### Health
+
+- `GET /health`
 
 ### Auth
 
@@ -108,11 +120,11 @@ Example employee payload:
 - `GET /api/ideas?scope=mine`
 - `GET /api/ideas?scope=moderation`
 - `GET /api/ideas?scope=director_review`
-- `GET /api/ideas/:ideaId`
+- `GET /api/ideas/{ideaId}`
 - `POST /api/ideas`
-- `POST /api/ideas/:ideaId/moderate`
-- `POST /api/ideas/:ideaId/vote`
-- `POST /api/ideas/:ideaId/decision`
+- `POST /api/ideas/{ideaId}/moderate`
+- `POST /api/ideas/{ideaId}/vote`
+- `POST /api/ideas/{ideaId}/decision`
 
 Create idea payload:
 
@@ -160,15 +172,6 @@ Director decision payload:
 - if support becomes greater than `50%`, the idea moves to `director_review`
 - if all eligible votes are cast and support is still `<= 50%`, the idea moves to `rejected_by_vote`
 - final director decision moves the idea into the archive
-
-## Seed credentials
-
-After `npm run seed` you can log in with:
-
-- director: `+70000000001` / `director123`
-- admin: `+70000000002` / `admin123`
-- employee: `+70000000003` / `employee123`
-- employee: `+70000000004` / `employee123`
 
 ## Response shape
 
