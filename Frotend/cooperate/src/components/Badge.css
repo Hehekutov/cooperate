@@ -1,0 +1,24 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.badge-ghost {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--accent);
+}
+.badge-positive {
+  background: rgba(15, 157, 88, 0.12);
+  color: var(--positive);
+}
+.badge-negative {
+  background: rgba(211, 47, 47, 0.12);
+  color: var(--negative);
+}

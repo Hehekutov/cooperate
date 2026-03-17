@@ -1,0 +1,31 @@
+.employee-card {
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+  min-height: 220px;
+}
+.employee-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--surface-alt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--secondary);
+}
+.employee-info h4 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.employee-info p {
+  margin: 0;
+  color: var(--secondary);
+}
