@@ -2,31 +2,39 @@
   background: var(--surface);
   border-radius: 24px;
   border: 1px solid var(--border);
-  padding: 2rem;
+  padding: clamp(1.35rem, 1.4vw + 1rem, 2rem);
   margin: 2rem;
   box-shadow: var(--shadow-soft);
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.1rem;
+  min-width: 0;
 }
 .idea-detail-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 .idea-detail-title {
   margin: 0;
-  font-size: 2rem;
+  font-size: clamp(1.4rem, 2vw + 0.9rem, 2rem);
   font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 .idea-detail-progress {
-  font-size: 3rem;
+  font-size: clamp(2rem, 4vw, 3rem);
   color: var(--accent);
   margin: 0;
+  line-height: 1;
+  white-space: nowrap;
 }
 .idea-detail-status {
-  padding: 0.3rem 1rem;
+  display: inline-flex;
+  padding: 0.35rem 0.9rem;
   border-radius: 999px;
   background: rgba(15, 157, 88, 0.12);
   font-weight: 600;
@@ -34,30 +42,36 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.85rem;
+  max-width: 100%;
 }
 .idea-detail-body {
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 1rem 1.2rem;
+  border-radius: 18px;
+  padding: 1rem 1.15rem;
   background: var(--surface-alt);
   color: var(--secondary);
   line-height: 1.6;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .idea-detail-panel small {
   color: var(--secondary);
   font-size: 0.95rem;
+  line-height: 1.5;
 }
 .idea-detail-actions {
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
+  min-width: 0;
 }
 .idea-detail-btn {
   border: 1px solid transparent;
   padding: 0.65rem 1.4rem;
-  border-radius: 12px;
+  border-radius: 999px;
   font-weight: 600;
   cursor: pointer;
+  min-width: 0;
 }
 .idea-detail-btn.primary {
   background: var(--accent);
@@ -68,4 +82,23 @@
   background: transparent;
   border-color: var(--border);
   color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .idea-detail-panel {
+    margin-inline: 0.75rem;
+    gap: 1rem;
+  }
+
+  .idea-detail-header {
+    align-items: flex-start;
+  }
+
+  .idea-detail-progress {
+    width: 100%;
+  }
+
+  .idea-detail-btn {
+    width: 100%;
+  }
 }

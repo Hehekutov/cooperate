@@ -1,7 +1,7 @@
 :root {
   color: #111;
   font-family: "Space Grotesk", "Manrope", "Segoe UI", system-ui, sans-serif;
-  line-height: 1.4;
+  line-height: 1.45;
   background-color: #f7f7f5;
   --surface: #ffffff;
   --surface-alt: #f4f4ef;
@@ -13,11 +13,25 @@
   --negative: #d32f2f;
   --warning: #f29f05;
   --shadow-soft: 0 14px 40px rgba(16, 16, 16, 0.08);
+  --page-width: 1180px;
+  --page-gutter: 16px;
+  --content-gap: 20px;
+  --surface-elevated: rgba(255, 255, 255, 0.82);
+  --surface-inset: rgba(244, 244, 239, 0.76);
+  --focus-ring: 0 0 0 3px rgba(16, 16, 16, 0.14);
 }
 
 body {
   margin: 0;
-  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.6), transparent 180px),
-    linear-gradient(180deg, #f7f7f5, #ededed);
+  color: var(--accent);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.8), transparent 220px),
+    radial-gradient(circle at left 20%, rgba(16, 16, 16, 0.025), transparent 320px),
+    linear-gradient(180deg, #f8f8f6 0%, #f1f1ee 46%, #ecece8 100%);
   min-height: 100vh;
+}
+
+::selection {
+  background: rgba(16, 16, 16, 0.1);
+  color: var(--accent);
 }

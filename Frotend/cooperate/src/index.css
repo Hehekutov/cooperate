@@ -12,12 +12,21 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 96px;
+  background: var(--surface);
 }
 
 body {
   min-width: 320px;
+  overflow-x: hidden;
 }
 
 button,
@@ -33,4 +42,14 @@ button {
 
 #root {
   min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
 }

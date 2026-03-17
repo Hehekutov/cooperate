@@ -1,38 +1,47 @@
 .idea-card {
   background: var(--surface);
-  border-radius: 16px;
+  border-radius: 20px;
   border: 1px solid var(--border);
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+  padding: 1.35rem;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 0.85rem;
   box-shadow: var(--shadow-soft);
   min-height: 220px;
+  min-width: 0;
 }
 .idea-card-title {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
 .idea-card-description {
   margin: 0;
   color: var(--secondary);
   font-size: 0.95rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 .idea-card-footer {
   margin-top: auto;
   display: flex;
-  align-items: center;
+  align-items: end;
   justify-content: space-between;
   gap: 1rem;
+  min-width: 0;
 }
 .idea-status {
-  padding: 0.25rem 0.9rem;
+  padding: 0.3rem 0.8rem;
   border-radius: 999px;
   font-size: 0.8rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  max-width: 100%;
+  min-width: 0;
 }
 .idea-status.active {
   background: rgba(15, 157, 88, 0.1);
@@ -47,20 +56,43 @@
   color: var(--negative);
 }
 .idea-card-progress {
-  font-size: 2rem;
+  font-size: clamp(1.5rem, 3vw, 2rem);
   font-weight: 700;
   color: var(--accent);
+  line-height: 1;
+  text-align: right;
 }
 .idea-card-button {
   border: none;
   background: var(--accent);
   color: #fff;
-  padding: 0.45rem 1rem;
-  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
   cursor: pointer;
   font-weight: 600;
+  white-space: nowrap;
 }
 .idea-card-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .idea-card {
+    padding: 1.2rem;
+    gap: 0.75rem;
+  }
+
+  .idea-card-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .idea-card-progress {
+    text-align: left;
+  }
+
+  .idea-card-button {
+    width: 100%;
+  }
 }

@@ -1,14 +1,23 @@
 .feedback-state {
   background: var(--surface);
-  border-radius: 16px;
+  border-radius: 20px;
   border: 1px solid var(--border);
-  padding: 1.5rem;
+  padding: 1.5rem 1.35rem;
   text-align: center;
   color: var(--secondary);
+  line-height: 1.55;
+  min-width: 0;
+  box-shadow: var(--shadow-soft);
 }
 .feedback-state strong {
   display: block;
   color: var(--accent);
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   margin-bottom: 0.4rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.feedback-state span {
+  overflow-wrap: anywhere;
 }
