@@ -1,0 +1,66 @@
+.idea-card {
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  box-shadow: var(--shadow-soft);
+  min-height: 220px;
+}
+.idea-card-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.idea-card-description {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 0.95rem;
+}
+.idea-card-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.idea-status {
+  padding: 0.25rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.idea-status.active {
+  background: rgba(15, 157, 88, 0.1);
+  color: var(--positive);
+}
+.idea-status.pending {
+  background: rgba(242, 159, 5, 0.12);
+  color: var(--warning);
+}
+.idea-status.rejected {
+  background: rgba(211, 47, 47, 0.12);
+  color: var(--negative);
+}
+.idea-card-progress {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.idea-card-button {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.idea-card-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
