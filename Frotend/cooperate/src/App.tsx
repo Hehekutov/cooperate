@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState, type FormEventHandler } from 'react'
+import { startTransition, useCallback, useEffect, useMemo, useState, type FormEventHandler } from 'react'
 import {
   ApiClientError,
   clearStoredSession,
@@ -69,95 +69,9 @@ type PreviewIdea = {
 
 const DEFAULT_VIEW: View = 'appeals'
 
-const GUEST_COMPANY_NAME = 'OOO "Тмыв"'
+const GUEST_COMPANY_NAME = 'Новая компания'
 
-const PREVIEW_APPEALS: PreviewIdea[] = [
-  {
-    id: 'coffee-machine',
-    title: 'Поставить кофемашину',
-    description: 'Предлагаю поставить в офисе кофемашину для сотрудников кухни.',
-    detail:
-      'Многие сотрудники любят кофе, и общая кофемашина сократит постоянные выходы из офиса, сэкономит время и создаст более комфортную кухню.',
-    supportPercent: 60,
-    statusLabel: 'Активно',
-    cardStatus: 'active',
-  },
-  {
-    id: 'badge-app',
-    title: 'Отдельное приложение для заказа пропусков',
-    description: 'Есть предложение вынести оформление пропусков в отдельный внутренний сервис.',
-    detail:
-      'Сервис для заказа пропусков поможет офис-менеджеру и сотрудникам быстрее проводить курьеров, гостей и подрядчиков без ручной переписки.',
-    supportPercent: 54,
-    statusLabel: 'Голосование',
-    cardStatus: 'active',
-  },
-  {
-    id: 'ps5',
-    title: 'Купить PlayStation 5',
-    description: 'Неплохая идея для зоны отдыха и корпоративных мероприятий.',
-    detail:
-      'Игровая приставка в зоне отдыха может поддержать внутренние активности, тимбилдинги и неформальное общение между отделами.',
-    supportPercent: 31,
-    statusLabel: 'На модерации',
-    cardStatus: 'pending',
-  },
-]
-
-const PREVIEW_ARCHIVE = [
-  {
-    id: 'cooler',
-    title: 'Кулер на 2 этаже',
-    description: 'Давайте поставим кулер на втором этаже с горячей и холодной водой.',
-    status: 'done' as const,
-  },
-  {
-    id: 'computers',
-    title: 'Обновить компьютеры',
-    description: 'Нужны более мощные ПК для рабочих задач.',
-    status: 'done' as const,
-  },
-  {
-    id: 'free-food',
-    title: 'Бесплатная еда',
-    description: 'Слишком дорого покупать еду каждый день.',
-    status: 'rejected' as const,
-  },
-]
-
-const PREVIEW_EMPLOYEES = [
-  { id: '1', name: 'Иван Михайлович Перевищков', position: 'Директор', role: 'director' as const },
-  {
-    id: '2',
-    name: 'Иннокентий Аркадьевич Петрячев',
-    position: 'Главный программист',
-    role: 'admin' as const,
-  },
-  {
-    id: '3',
-    name: 'Денис Родионович Айсеминов',
-    position: 'Фронтенд-разработчик',
-    role: 'employee' as const,
-  },
-  {
-    id: '4',
-    name: 'Иван Петрович Лаврентьев',
-    position: 'Бизнес-аналитик',
-    role: 'employee' as const,
-  },
-  {
-    id: '5',
-    name: 'Николай Никитич Пусанов',
-    position: 'Бэкенд-разработчик',
-    role: 'employee' as const,
-  },
-  {
-    id: '6',
-    name: 'София Робертовна Колбасенко',
-    position: 'Секретарь',
-    role: 'admin' as const,
-  },
-]
+const PREVIEW_APPEALS: PreviewIdea[] = []
 
 const getViewFromHash = (): View => {
   const hash = window.location.hash.replace('#', '').trim()
@@ -260,11 +174,13 @@ const getIdeaPreview = (idea: Idea) => idea.descriptionPreview || idea.descripti
 const getIdeaSupportText = (idea: Idea) =>
   `${idea.votes.support} за · ${idea.votes.against} против · осталось ${idea.votes.remainingVotes}`
 
+const getViewerVoteValue = (idea: Idea | null) => idea?.viewerVote?.value ?? null
+
 const canModerate = (viewer: User | null, idea: Idea | null) =>
   Boolean(viewer && idea && idea.status === 'pending_moderation' && viewer.role !== 'employee')
 
 const canVote = (viewer: User | null, idea: Idea | null) =>
-  Boolean(viewer && idea && idea.status === 'voting' && !idea.viewerVote)
+  Boolean(viewer && idea && idea.status === 'voting' && !getViewerVoteValue(idea))
 
 const canDecide = (viewer: User | null, idea: Idea | null) =>
   Boolean(viewer && idea && idea.status === 'director_review' && viewer.role === 'director')
@@ -282,8 +198,10 @@ const getDetailHint = (idea: Idea | null, viewer: User | null) => {
     return 'Порог поддержки достигнут. Осталось финальное решение директора.'
   }
 
-  if (idea.viewerVote) {
-    return `Ваш голос уже учтен: ${idea.viewerVote === 'for' ? 'за' : 'против'}.`
+  const viewerVote = getViewerVoteValue(idea)
+
+  if (viewerVote) {
+    return `Ваш голос уже учтен: ${viewerVote === 'for' ? 'за' : 'против'}.`
   }
 
   if (viewer?.role === 'employee' && idea.status === 'voting') {
@@ -353,7 +271,7 @@ function App() {
     }
   }, [])
 
-  const updateSession = (nextSession: AuthSession | null) => {
+  const updateSession = useCallback((nextSession: AuthSession | null) => {
     setSession(nextSession)
 
     if (!nextSession) {
@@ -375,7 +293,7 @@ function App() {
     persistSession(nextSession)
     setViewer(nextSession.user)
     setCompany(nextSession.company)
-  }
+  }, [])
 
   const resolveIdeaById = (ideaId: string) => {
     if (selectedIdea?.id === ideaId) {
@@ -386,7 +304,7 @@ function App() {
     return collections.flat().find((idea) => idea.id === ideaId) ?? null
   }
 
-  const handleUnauthorized = (error: unknown) => {
+  const handleUnauthorized = useCallback((error: unknown) => {
     if (error instanceof ApiClientError && error.status === 401) {
       updateSession(null)
       setNotice(makeNotice('error', 'Сессия истекла. Войдите снова.'))
@@ -398,7 +316,7 @@ function App() {
     }
 
     return false
-  }
+  }, [updateSession])
 
   const navigateTo = (nextView: View) => {
     if (window.location.hash !== `#${nextView}`) {
@@ -410,7 +328,7 @@ function App() {
     })
   }
 
-  const refreshEmployees = async (currentSession: AuthSession) => {
+  const refreshEmployees = useCallback(async (currentSession: AuthSession) => {
     try {
       const response = await getEmployees(currentSession.token)
       setEmployees(response.items)
@@ -423,9 +341,9 @@ function App() {
       setEmployees([])
       setEmployeesError(getErrorMessage(error, 'Не удалось загрузить сотрудников'))
     }
-  }
+  }, [handleUnauthorized])
 
-  const refreshDashboard = async (currentSession: AuthSession, preserveIdeaId?: string | null) => {
+  const refreshDashboard = useCallback(async (currentSession: AuthSession, preserveIdeaId?: string | null) => {
     setPageLoading(true)
     setPageError(null)
 
@@ -461,13 +379,13 @@ function App() {
       setPendingIdeas(pendingResponse.items)
       setDirectorIdeas(directorResponse.items)
 
-      if (view === 'employees' || employees.length > 0 || context.user.role === 'director') {
+      if (window.location.hash === '#employees' || employees.length > 0 || context.user.role === 'director') {
         await refreshEmployees(nextSession)
       }
 
       const preferredIdea = getPreferredIdea(
         [directorResponse.items, pendingResponse.items, activeResponse.items, mineResponse.items],
-        preserveIdeaId ?? selectedIdeaId,
+        preserveIdeaId ?? null,
       )
 
       setSelectedIdeaId(preferredIdea?.id ?? null)
@@ -481,7 +399,7 @@ function App() {
     } finally {
       setPageLoading(false)
     }
-  }
+  }, [employees.length, handleUnauthorized, refreshEmployees, updateSession])
 
   useEffect(() => {
     if (!session) {
@@ -490,8 +408,7 @@ function App() {
     }
 
     void refreshDashboard(session, session.user.id === viewer?.id ? selectedIdeaId : null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.token])
+  }, [refreshDashboard, selectedIdeaId, session, viewer?.id])
 
   useEffect(() => {
     if (!session || view !== 'employees' || employees.length > 0 || employeesError) {
@@ -499,7 +416,7 @@ function App() {
     }
 
     void refreshEmployees(session)
-  }, [employees.length, employeesError, session, view])
+  }, [employees.length, employeesError, refreshEmployees, session, view])
 
   const openIdeaDetails = async (ideaId: string, fallback?: Idea) => {
     if (!session) {
@@ -831,13 +748,15 @@ function App() {
         `Автор: ${detailIdea.author.fullName}`,
         `Статус: ${getStatusMeta(detailIdea.status).label}`,
         `Порог: >${detailIdea.votes.thresholdPercent}%`,
-        detailIdea.viewerVote ? `Ваш голос: ${detailIdea.viewerVote === 'for' ? 'за' : 'против'}` : null,
+        getViewerVoteValue(detailIdea)
+          ? `Ваш голос: ${getViewerVoteValue(detailIdea) === 'for' ? 'за' : 'против'}`
+          : null,
       ].filter(Boolean)
     : []
 
   const renderGuestAppeals = () => (
     <>
-      {previewSelectedIdea && (
+      {previewSelectedIdea ? (
         <IdeaDetailPanel
           title={previewSelectedIdea.title}
           description={previewSelectedIdea.detail}
@@ -849,6 +768,13 @@ function App() {
           onDetails={() => openModal({ kind: 'register-company' })}
           moderationHint="После входа сотрудник может предложить свою идею, а администратор проверит текст обращения."
         />
+      ) : (
+        <section className="app-section">
+          <EmptyState
+            message="Приложение готово к первому запуску"
+            detail="После регистрации компании здесь появятся обращения, сотрудники и история решений."
+          />
+        </section>
       )}
 
       <section className="app-flow-grid">
@@ -880,7 +806,10 @@ function App() {
         </article>
       </section>
 
-      <IdeaListSection title="Обращения">
+      <IdeaListSection
+        title="Обращения"
+        emptyMessage="После первого обращения здесь появится список идей сотрудников."
+      >
         {PREVIEW_APPEALS.map((idea) => (
           <IdeaCard
             key={idea.id}
@@ -1076,7 +1005,14 @@ function App() {
 
   const renderArchive = () => {
     if (!session) {
-      return <ArchiveList items={PREVIEW_ARCHIVE} />
+      return (
+        <section className="app-section">
+          <EmptyState
+            message="Архив пока пуст"
+            detail="Он заполнится после первых завершённых или отклонённых обращений."
+          />
+        </section>
+      )
     }
 
     if (pageLoading && archiveIdeas.length === 0) {
@@ -1117,7 +1053,14 @@ function App() {
 
   const renderEmployees = () => {
     if (!session) {
-      return <EmployeeGrid employees={PREVIEW_EMPLOYEES} />
+      return (
+        <section className="app-section">
+          <EmptyState
+            message="Список сотрудников пуст"
+            detail="После регистрации компании директор сможет добавить первых сотрудников вручную."
+          />
+        </section>
+      )
     }
 
     if (view === 'employees' && pageLoading && employees.length === 0) {
@@ -1280,7 +1223,7 @@ function App() {
                     onChange={(event) =>
                       setRegisterForm((current) => ({ ...current, companyName: event.target.value }))
                     }
-                    placeholder="ООО Тмыв"
+                    placeholder="ООО Ромашка"
                   />
                 </label>
                 <label className="form-field">
@@ -1398,7 +1341,7 @@ function App() {
                       onChange={(event) =>
                         setEmployeeForm((current) => ({ ...current, fullName: event.target.value }))
                       }
-                      placeholder="София Колбасенко"
+                      placeholder="Иван Иванов"
                     />
                   </label>
                   <label className="form-field">

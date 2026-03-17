@@ -12,24 +12,6 @@ var appOptions = new AppOptions
     CorsOrigin = Environment.GetEnvironmentVariable("CORS_ORIGIN") ?? "*"
 };
 
-var seedMode = args.Any(argument => string.Equals(argument, "seed", StringComparison.OrdinalIgnoreCase));
-
-if (seedMode)
-{
-    var seedStore = new FileStateStore(appOptions.DataFile);
-    await seedStore.EnsureAsync();
-
-    var seedService = new AppService(seedStore, appOptions);
-    await seedService.SeedDemoDataAsync();
-
-    Console.WriteLine($"Seed completed: {appOptions.DataFile}");
-    Console.WriteLine("Director: +70000000001 / director123");
-    Console.WriteLine("Admin:    +70000000002 / admin123");
-    Console.WriteLine("Employee: +70000000003 / employee123");
-    Console.WriteLine("Employee: +70000000004 / employee123");
-    return;
-}
-
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton(appOptions);

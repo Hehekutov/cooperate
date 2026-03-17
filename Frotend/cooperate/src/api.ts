@@ -13,6 +13,10 @@ export type IdeaStatus =
 
 export type IdeaScope = 'active' | 'archive'
 export type VoteValue = 'for' | 'against'
+export type ViewerVote = {
+  value: VoteValue
+  createdAt: string
+}
 
 export type Company = {
   id: string
@@ -62,7 +66,7 @@ export type Idea = {
     thresholdPercent: number
     passed: boolean
   }
-  viewerVote: VoteValue | null
+  viewerVote: ViewerVote | null
   directorDecision: {
     decidedBy: User | null
     comment: string | null

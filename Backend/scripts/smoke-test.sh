@@ -16,7 +16,7 @@ trap cleanup EXIT
 
 rm -f "${DATA_FILE}" "${LOG_FILE}"
 
-ASPNETCORE_URLS="http://127.0.0.1:${PORT}" DATA_FILE="${DATA_FILE}" dotnet run --no-build >"${LOG_FILE}" 2>&1 &
+ASPNETCORE_URLS="http://127.0.0.1:${PORT}" DATA_FILE="${DATA_FILE}" dotnet run --project Backend/Backend.csproj --no-build >"${LOG_FILE}" 2>&1 &
 SERVER_PID=$!
 
 for _ in $(seq 1 40); do
