@@ -11,8 +11,9 @@ export type IdeaStatus =
   | 'approved_by_director'
   | 'rejected_by_director'
 
-export type IdeaScope = 'active' | 'archive'
+export type IdeaScope = 'active' | 'archive' | 'mine' | 'director_review' | 'ai'
 export type VoteValue = 'for' | 'against'
+export type VotingType = 'standard' | 'secret'
 export type ViewerVote = {
   value: VoteValue
   createdAt: string
@@ -21,6 +22,7 @@ export type ViewerVote = {
 export type Company = {
   id: string
   name: string
+  inn: string
   description: string | null
   createdAt: string
   settings: {
@@ -33,6 +35,7 @@ export type User = {
   id: string
   companyId: string
   fullName: string
+  login: string
   phone: string
   role: UserRole
   position: string
@@ -44,6 +47,7 @@ export type User = {
 export type Idea = {
   id: string
   companyId: string
+  votingType: VotingType
   title: string
   description: string
   descriptionPreview: string
@@ -79,6 +83,8 @@ export type Idea = {
   votingOpenedAt?: string | null
   votingClosedAt?: string | null
   directorReviewRequestedAt?: string | null
+  aiScore: number
+  aiRecommended: boolean
 }
 
 export type CompanyStats = {
@@ -113,7 +119,7 @@ export type CompanyOverview = {
 }
 
 export type IdeaListParams = {
-  scope?: 'active' | 'archive' | 'mine' | 'director_review'
+  scope?: 'active' | 'archive' | 'mine' | 'director_review' | 'ai'
   status?: IdeaStatus
   sort?: 'recent' | 'support'
   limit?: number
@@ -121,20 +127,24 @@ export type IdeaListParams = {
 
 export type RegisterCompanyPayload = {
   companyName: string
+  companyInn: string
   companyDescription: string
   directorName: string
+  directorLogin: string
   directorPosition: string
   phone: string
   password: string
 }
 
 export type LoginPayload = {
-  phone: string
+  login: string
+  phone?: string
   password: string
 }
 
 export type CreateEmployeePayload = {
   fullName: string
+  login: string
   phone: string
   password: string
   role: Exclude<UserRole, 'director'> | 'director'
@@ -144,6 +154,7 @@ export type CreateEmployeePayload = {
 export type CreateIdeaPayload = {
   title: string
   description: string
+  votingType: VotingType
 }
 
 export type ModerateIdeaPayload = {

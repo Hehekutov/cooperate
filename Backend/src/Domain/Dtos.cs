@@ -4,9 +4,13 @@ public sealed class RegisterCompanyRequest
 {
     public string? CompanyName { get; set; }
 
+    public string? CompanyInn { get; set; }
+
     public string? CompanyDescription { get; set; }
 
     public string? DirectorName { get; set; }
+
+    public string? DirectorLogin { get; set; }
 
     public string? DirectorPosition { get; set; }
 
@@ -19,6 +23,8 @@ public sealed class RegisterCompanyRequest
 
 public sealed class LoginRequest
 {
+    public string? Login { get; set; }
+
     public string? Phone { get; set; }
 
     public string? Password { get; set; }
@@ -27,6 +33,8 @@ public sealed class LoginRequest
 public sealed class CreateEmployeeRequest
 {
     public string? FullName { get; set; }
+
+    public string? Login { get; set; }
 
     public string? Phone { get; set; }
 
@@ -44,6 +52,8 @@ public sealed class CreateIdeaRequest
     public string? Title { get; set; }
 
     public string? Description { get; set; }
+
+    public string? VotingType { get; set; }
 }
 
 public sealed class ModerateIdeaRequest
@@ -84,6 +94,8 @@ public sealed class CompanyDto
 
     public string Name { get; init; } = string.Empty;
 
+    public string Inn { get; init; } = string.Empty;
+
     public string? Description { get; init; }
 
     public string CreatedAt { get; init; } = string.Empty;
@@ -98,6 +110,8 @@ public sealed class UserDto
     public string CompanyId { get; init; } = string.Empty;
 
     public string FullName { get; init; } = string.Empty;
+
+    public string Login { get; init; } = string.Empty;
 
     public string Phone { get; init; } = string.Empty;
 
@@ -248,6 +262,8 @@ public sealed class IdeaDto
 
     public string CompanyId { get; init; } = string.Empty;
 
+    public string VotingType { get; init; } = string.Empty;
+
     public string Title { get; init; } = string.Empty;
 
     public string Description { get; init; } = string.Empty;
@@ -273,6 +289,10 @@ public sealed class IdeaDto
     public IdeaTimelineDto Timeline { get; init; } = new();
 
     public IdeaAvailableActionsDto AvailableActions { get; init; } = new();
+
+    public int AiScore { get; init; }
+
+    public bool AiRecommended { get; init; }
 }
 
 public sealed class IdeaListDto

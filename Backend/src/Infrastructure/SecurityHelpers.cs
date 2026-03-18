@@ -27,6 +27,30 @@ public static partial class SecurityHelpers
         return $"+{digits}";
     }
 
+    public static string NormalizeInn(string? inn)
+    {
+        var digits = DigitsPattern().Replace(inn ?? string.Empty, string.Empty);
+
+        if (digits.Length is not (10 or 12))
+        {
+            throw new AppException(StatusCodes.Status400BadRequest, "BAD_REQUEST", "Company INN must contain 10 or 12 digits");
+        }
+
+        return digits;
+    }
+
+    public static string NormalizeLogin(string? login)
+    {
+        var normalized = (login ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (normalized.Length < 3)
+        {
+            throw new AppException(StatusCodes.Status400BadRequest, "BAD_REQUEST", "Login must contain at least 3 characters");
+        }
+
+        return normalized;
+    }
+
     public static string HashPassword(string? password)
     {
         var normalized = password ?? string.Empty;

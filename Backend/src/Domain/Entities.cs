@@ -21,6 +21,8 @@ public sealed class Company
 
     public string Name { get; set; } = string.Empty;
 
+    public string Inn { get; set; } = string.Empty;
+
     public string? Description { get; set; }
 
     public string CreatedAt { get; set; } = string.Empty;
@@ -42,6 +44,8 @@ public sealed class UserAccount
     public string CompanyId { get; set; } = string.Empty;
 
     public string FullName { get; set; } = string.Empty;
+
+    public string Login { get; set; } = string.Empty;
 
     public string Phone { get; set; } = string.Empty;
 
@@ -65,6 +69,8 @@ public sealed class Idea
     public string CompanyId { get; set; } = string.Empty;
 
     public string AuthorId { get; set; } = string.Empty;
+
+    public string VotingType { get; set; } = string.Empty;
 
     public string Title { get; set; } = string.Empty;
 

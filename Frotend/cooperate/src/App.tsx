@@ -24,6 +24,7 @@ import {
   type CreateIdeaPayload,
   type Idea,
   type IdeaStatus,
+  type VotingType,
   type User,
   type UserRole,
   type VoteValue,
@@ -134,27 +135,36 @@ const ROLE_LABEL: Record<UserRole, string> = {
   employee: 'Сотрудник',
 }
 
+const VOTING_TYPE_LABEL: Record<VotingType, string> = {
+  standard: 'Открытое',
+  secret: 'Тайное',
+}
+
 const defaultRegisterForm = {
   companyName: '',
+  companyInn: '',
   companyDescription: '',
   directorName: '',
+  directorLogin: '',
   directorPosition: '',
   phone: '',
   password: '',
 }
 
 const defaultLoginForm = {
-  phone: '',
+  login: '',
   password: '',
 }
 
 const defaultIdeaForm: CreateIdeaPayload = {
   title: '',
   description: '',
+  votingType: 'standard',
 }
 
 const defaultEmployeeForm: CreateEmployeePayload = {
   fullName: '',
+  login: '',
   phone: '',
   password: '',
   role: 'employee',
@@ -166,6 +176,8 @@ const makeNotice = (tone: Notice['tone'], text: string): Notice => ({ tone, text
 const getStatusMeta = (status: IdeaStatus) => STATUS_META[status]
 
 const formatRoleChip = (role: UserRole) => ROLE_LABEL[role]
+
+const formatVotingType = (votingType: VotingType) => VOTING_TYPE_LABEL[votingType]
 
 const toPercent = (value?: number) => Math.round(value ?? 0)
 
@@ -196,6 +208,10 @@ const getDetailHint = (idea: Idea | null, viewer: User | null) => {
 
   if (idea.status === 'director_review') {
     return 'Порог поддержки достигнут. Осталось финальное решение директора.'
+  }
+
+  if (idea.votingType === 'secret') {
+    return 'Тайный формат голосования включен для этой идеи.'
   }
 
   const viewerVote = getViewerVoteValue(idea)
@@ -236,6 +252,7 @@ function App() {
   const [mineIdeas, setMineIdeas] = useState<Idea[]>([])
   const [pendingIdeas, setPendingIdeas] = useState<Idea[]>([])
   const [directorIdeas, setDirectorIdeas] = useState<Idea[]>([])
+  const [aiIdeas, setAiIdeas] = useState<Idea[]>([])
   const [employees, setEmployees] = useState<User[]>([])
 
   const [selectedIdeaId, setSelectedIdeaId] = useState<string | null>(null)
@@ -284,6 +301,7 @@ function App() {
       setMineIdeas([])
       setPendingIdeas([])
       setDirectorIdeas([])
+      setAiIdeas([])
       setEmployees([])
       setSelectedIdea(null)
       setSelectedIdeaId(null)
@@ -349,7 +367,7 @@ function App() {
 
     try {
       const role = currentSession.user.role
-      const [context, activeResponse, archiveResponse, mineResponse, pendingResponse, directorResponse] =
+      const [context, activeResponse, archiveResponse, mineResponse, pendingResponse, directorResponse, aiResponse] =
         await Promise.all([
           getAuthMe(currentSession.token),
           getIdeas(currentSession.token, { scope: 'active', sort: 'recent', limit: 12 }),
@@ -363,6 +381,7 @@ function App() {
           role === 'director'
             ? getIdeas(currentSession.token, { scope: 'director_review', sort: 'recent', limit: 8 })
             : Promise.resolve({ items: [] }),
+          getIdeas(currentSession.token, { scope: 'ai', sort: 'support', limit: 8 }),
         ])
 
       const nextSession: AuthSession = {
@@ -378,13 +397,14 @@ function App() {
       setMineIdeas(mineResponse.items)
       setPendingIdeas(pendingResponse.items)
       setDirectorIdeas(directorResponse.items)
+      setAiIdeas(aiResponse.items)
 
       if (window.location.hash === '#employees' || employees.length > 0 || context.user.role === 'director') {
         await refreshEmployees(nextSession)
       }
 
       const preferredIdea = getPreferredIdea(
-        [directorResponse.items, pendingResponse.items, activeResponse.items, mineResponse.items],
+        [directorResponse.items, pendingResponse.items, aiResponse.items, activeResponse.items, mineResponse.items],
         preserveIdeaId ?? null,
       )
 
@@ -680,10 +700,7 @@ function App() {
 
   const activePrimaryAction = useMemo(() => {
     if (!viewer) {
-      return {
-        label: 'Регистрация',
-        action: () => openModal({ kind: 'register-company' as const }),
-      }
+      return null
     }
 
     if (viewer.role === 'director') {
@@ -727,6 +744,7 @@ function App() {
         { label: 'Сотрудники', value: stats?.employees ?? employees.length ?? 0 },
         { label: 'Активные обращения', value: stats?.ideas.active ?? activeIdeas.length },
         { label: 'В архиве', value: stats?.ideas.archive ?? archiveIdeas.length },
+        { label: 'ИНН', value: company?.inn || '—' },
         { label: 'Порог поддержки', value: `>${currentSettings?.voteApprovalPercent ?? 50}%` },
       ]
     : [
@@ -747,6 +765,8 @@ function App() {
     ? [
         `Автор: ${detailIdea.author.fullName}`,
         `Статус: ${getStatusMeta(detailIdea.status).label}`,
+        `Тип голосования: ${formatVotingType(detailIdea.votingType)}`,
+        `AI-оценка: ${detailIdea.aiScore}`,
         `Порог: >${detailIdea.votes.thresholdPercent}%`,
         getViewerVoteValue(detailIdea)
           ? `Ваш голос: ${getViewerVoteValue(detailIdea) === 'for' ? 'за' : 'против'}`
@@ -799,7 +819,7 @@ function App() {
           </p>
           <div className="info-chip-row">
             <Badge label="Вход" />
-            <Badge label="Регистрация" />
+            <Badge label="Компания" />
             <Badge label="Добавление сотрудников" />
             <Badge label="Фильтрация" />
           </div>
@@ -962,6 +982,29 @@ function App() {
           </IdeaListSection>
         )}
 
+        {aiIdeas.length > 0 && (
+          <IdeaListSection
+            title="AI-рекомендации"
+            emptyMessage="ИИ пока не нашел подходящих обращений."
+          >
+            {aiIdeas.map((idea) => {
+              const status = getStatusMeta(idea.status)
+              return (
+                <IdeaCard
+                  key={idea.id}
+                  title={idea.title}
+                  description={getIdeaPreview(idea)}
+                  supportPercent={toPercent(idea.votes.approvalPercent)}
+                  status={status.cardStatus}
+                  statusLabel={`${status.label} · AI ${idea.aiScore}`}
+                  ctaLabel={canVote(viewer, idea) ? 'Голосовать' : 'Открыть'}
+                  onVote={() => void openIdeaDetails(idea.id, idea)}
+                />
+              )
+            })}
+          </IdeaListSection>
+        )}
+
         {mineIdeas.length > 0 && viewer?.role !== 'director' && (
           <IdeaListSection title="Мои обращения">
             {mineIdeas.slice(0, 4).map((idea) => {
@@ -1111,16 +1154,15 @@ function App() {
   return (
     <div className="app-shell">
       <NavBar
-        companyName={companyTitle}
         tabs={navTabs}
         guestMode={!session}
         ctaLabel={!session ? 'Подключить компанию' : undefined}
         onCTAClick={!session ? () => openModal({ kind: 'register-company' }) : undefined}
-        ctaDescription={!session ? 'Гостевой режим показывает только концепт интерфейса' : undefined}
+        ctaDescription={!session ? 'Гостевой режим' : undefined}
         onLogin={session ? () => void handleLogout() : () => openModal({ kind: 'login' })}
-        onRegister={activePrimaryAction.action}
+        onRegister={session ? activePrimaryAction?.action : undefined}
         loginLabel={session ? 'Выйти' : 'Войти'}
-        registerLabel={activePrimaryAction.label}
+        registerLabel={activePrimaryAction?.label}
         currentUserLabel={session && viewer ? `${viewer.fullName} · ${formatRoleChip(viewer.role)}` : undefined}
       />
 
@@ -1130,8 +1172,8 @@ function App() {
           descriptor={heroDescriptor}
           stats={heroStats}
           roles={heroRoles}
-          ctaLabel={activePrimaryAction.label}
-          onCTAClick={activePrimaryAction.action}
+          ctaLabel={session ? activePrimaryAction?.label : 'Создать компанию'}
+          onCTAClick={session ? activePrimaryAction?.action : () => openModal({ kind: 'register-company' })}
           ctaHelper={
             session
               ? `Лимит идей в месяц: ${currentSettings?.ideaMonthlyLimit ?? 3}. Порог передачи директору: >${currentSettings?.voteApprovalPercent ?? 50}%.`
@@ -1170,7 +1212,7 @@ function App() {
             {modal.kind === 'login' && (
               <FormPanel
                 title="Вход пользователя"
-                description="Укажите телефон и пароль сотрудника или руководителя."
+                description="Укажите логин и пароль сотрудника или руководителя."
                 primaryCta={submitting ? 'Входим...' : 'Войти'}
                 onSubmit={submitLogin}
                 secondaryCta="Регистрация компании"
@@ -1180,13 +1222,13 @@ function App() {
                 fullWidth
               >
                 <label className="form-field">
-                  <span>Телефон</span>
+                  <span>Логин</span>
                   <input
-                    value={loginForm.phone}
+                    value={loginForm.login}
                     onChange={(event) =>
-                      setLoginForm((current) => ({ ...current, phone: event.target.value }))
+                      setLoginForm((current) => ({ ...current, login: event.target.value }))
                     }
-                    placeholder="+7 (900) 000-00-11"
+                    placeholder="director01"
                   />
                 </label>
                 <label className="form-field">
@@ -1207,7 +1249,7 @@ function App() {
             {modal.kind === 'register-company' && (
               <FormPanel
                 title="Регистрация компании"
-                description="Создайте компанию и первую учетную запись директора. Поле ИНН не отправляется, потому что текущий бэкенд его не поддерживает."
+                description="Создайте компанию, укажите ИНН и первую учетную запись директора."
                 primaryCta={submitting ? 'Регистрируем...' : 'Создать компанию'}
                 onSubmit={submitRegistration}
                 secondaryCta="Уже есть аккаунт"
@@ -1226,6 +1268,31 @@ function App() {
                     placeholder="ООО Ромашка"
                   />
                 </label>
+                <div className="modal-grid">
+                  <label className="form-field">
+                    <span>ИНН компании</span>
+                    <input
+                      value={registerForm.companyInn}
+                      onChange={(event) =>
+                        setRegisterForm((current) => ({ ...current, companyInn: event.target.value }))
+                      }
+                      placeholder="7701234567"
+                    />
+                  </label>
+                  <label className="form-field">
+                    <span>Логин директора</span>
+                    <input
+                      value={registerForm.directorLogin}
+                      onChange={(event) =>
+                        setRegisterForm((current) => ({
+                          ...current,
+                          directorLogin: event.target.value,
+                        }))
+                      }
+                      placeholder="director01"
+                    />
+                  </label>
+                </div>
                 <label className="form-field">
                   <span>Описание компании</span>
                   <textarea
@@ -1320,6 +1387,21 @@ function App() {
                     placeholder="Кратко опишите проблему, ожидаемую пользу и контекст."
                   />
                 </label>
+                <label className="form-field">
+                  <span>Тип голосования</span>
+                  <select
+                    value={ideaForm.votingType}
+                    onChange={(event) =>
+                      setIdeaForm((current) => ({
+                        ...current,
+                        votingType: event.target.value as VotingType,
+                      }))
+                    }
+                  >
+                    <option value="standard">Открытое</option>
+                    <option value="secret">Тайное</option>
+                  </select>
+                </label>
                 {modalError && <p className="modal-error">{modalError}</p>}
               </FormPanel>
             )}
@@ -1344,6 +1426,18 @@ function App() {
                       placeholder="Иван Иванов"
                     />
                   </label>
+                  <label className="form-field">
+                    <span>Логин</span>
+                    <input
+                      value={employeeForm.login}
+                      onChange={(event) =>
+                        setEmployeeForm((current) => ({ ...current, login: event.target.value }))
+                      }
+                      placeholder="employee01"
+                    />
+                  </label>
+                </div>
+                <div className="modal-grid">
                   <label className="form-field">
                     <span>Телефон</span>
                     <input

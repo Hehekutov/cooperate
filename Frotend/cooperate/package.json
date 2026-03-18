@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "node node_modules/typescript/bin/tsc -p tsconfig.app.json --pretty false",
+    "typecheck": "tsc -p tsconfig.app.json --pretty false",
     "lint": "eslint .",
     "preview": "vite preview"
   },

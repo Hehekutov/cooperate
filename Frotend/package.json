@@ -1,0 +1,15 @@
+{
+  "name": "cooperate-frontend-root",
+  "private": true,
+  "workspaces": [
+    "cooperate"
+  ],
+  "scripts": {
+    "dev": "npm --prefix cooperate run dev",
+    "build": "npm --prefix cooperate run build",
+    "typecheck": "npm --prefix cooperate run typecheck",
+    "lint": "npm --prefix cooperate run lint",
+    "preview": "npm --prefix cooperate run preview",
+    "install:workspace": "npm --prefix cooperate install"
+  }
+}

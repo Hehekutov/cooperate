@@ -10,7 +10,6 @@ export type NavItem = {
 }
 
 type NavBarProps = {
-  companyName: string
   tabs: NavItem[]
   onLogin?: () => void
   onRegister?: () => void
@@ -24,7 +23,6 @@ type NavBarProps = {
 }
 
 export const NavBar: FC<NavBarProps> = ({
-  companyName,
   tabs,
   onLogin,
   onRegister,
@@ -38,10 +36,6 @@ export const NavBar: FC<NavBarProps> = ({
 }) => {
   return (
     <header className="nav-bar">
-      <div className="nav-brand">
-        <span>○</span>
-        <span>{companyName}</span>
-      </div>
       <nav className="nav-tabs">
         {tabs.map((tab) => (
           <button
@@ -54,6 +48,14 @@ export const NavBar: FC<NavBarProps> = ({
           </button>
         ))}
       </nav>
+      {guestMode && ctaLabel && (
+        <div className="nav-cta">
+          <span>{ctaDescription ?? 'Расскажите о своих идеях'}</span>
+          <button type="button" onClick={onCTAClick}>
+            {ctaLabel}
+          </button>
+        </div>
+      )}
       {(currentUserLabel || onLogin || onRegister) && (
         <div className="nav-actions">
           {currentUserLabel && <span className="nav-user-pill">{currentUserLabel}</span>}
@@ -67,14 +69,6 @@ export const NavBar: FC<NavBarProps> = ({
               {registerLabel ?? 'Регистрация'}
             </button>
           )}
-        </div>
-      )}
-      {guestMode && ctaLabel && (
-        <div className="nav-cta">
-          <span>{ctaDescription ?? 'Расскажите о своих идеях'}</span>
-          <button type="button" onClick={onCTAClick}>
-            {ctaLabel}
-          </button>
         </div>
       )}
     </header>

@@ -18,6 +18,12 @@ public static class IdeaStatuses
     public const string RejectedByDirector = "rejected_by_director";
 }
 
+public static class VotingTypes
+{
+    public const string Standard = "standard";
+    public const string Secret = "secret";
+}
+
 public static class BusinessRules
 {
     public const int VoteApprovalPercent = 50;

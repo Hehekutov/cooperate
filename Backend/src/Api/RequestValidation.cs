@@ -22,6 +22,7 @@ internal static class RequestValidation
         "mine",
         "moderation",
         "director_review",
+        "ai",
         "all"
     ];
     private static readonly HashSet<string> IdeaStatuses =
@@ -43,8 +44,10 @@ internal static class RequestValidation
         new Dictionary<string, JsonPropertyRule>(StringComparer.Ordinal)
         {
             ["companyName"] = JsonPropertyRule.String(required: true, minLength: 1, maxLength: 120),
+            ["companyInn"] = JsonPropertyRule.String(required: true, minLength: 10, maxLength: 20),
             ["companyDescription"] = JsonPropertyRule.String(maxLength: 500),
             ["directorName"] = JsonPropertyRule.String(required: true, minLength: 1, maxLength: 120),
+            ["directorLogin"] = JsonPropertyRule.String(required: true, minLength: 3, maxLength: 60),
             ["directorPosition"] = JsonPropertyRule.String(maxLength: 120),
             ["phone"] = JsonPropertyRule.String(required: true, minLength: 10, maxLength: 30),
             ["password"] = JsonPropertyRule.String(required: true, minLength: 6, maxLength: 128),
@@ -53,13 +56,15 @@ internal static class RequestValidation
     private static readonly JsonObjectSchema LoginSchema = new(
         new Dictionary<string, JsonPropertyRule>(StringComparer.Ordinal)
         {
-            ["phone"] = JsonPropertyRule.String(required: true, minLength: 10, maxLength: 30),
+            ["login"] = JsonPropertyRule.String(minLength: 3, maxLength: 60),
+            ["phone"] = JsonPropertyRule.String(minLength: 10, maxLength: 30),
             ["password"] = JsonPropertyRule.String(required: true, minLength: 6, maxLength: 128)
         });
     private static readonly JsonObjectSchema CreateEmployeeSchema = new(
         new Dictionary<string, JsonPropertyRule>(StringComparer.Ordinal)
         {
             ["fullName"] = JsonPropertyRule.String(required: true, minLength: 1, maxLength: 120),
+            ["login"] = JsonPropertyRule.String(required: true, minLength: 3, maxLength: 60),
             ["phone"] = JsonPropertyRule.String(required: true, minLength: 10, maxLength: 30),
             ["password"] = JsonPropertyRule.String(required: true, minLength: 6, maxLength: 128),
             ["role"] = JsonPropertyRule.String(required: true, allowedValues: [Roles.Admin, Roles.Employee]),
@@ -70,7 +75,8 @@ internal static class RequestValidation
         new Dictionary<string, JsonPropertyRule>(StringComparer.Ordinal)
         {
             ["title"] = JsonPropertyRule.String(required: true, minLength: 1, maxLength: 160),
-            ["description"] = JsonPropertyRule.String(required: true, minLength: 1, maxLength: 3000)
+            ["description"] = JsonPropertyRule.String(required: true, minLength: 1, maxLength: 3000),
+            ["votingType"] = JsonPropertyRule.String(required: true, allowedValues: [VotingTypes.Standard, VotingTypes.Secret])
         });
     private static readonly JsonObjectSchema ModerateIdeaSchema = new(
         new Dictionary<string, JsonPropertyRule>(StringComparer.Ordinal)

@@ -22,18 +22,22 @@ public sealed class AppService
             CleanupExpiredSessions(state, nowIso);
 
             var companyName = CleanRequiredString(input.CompanyName, "companyName", 120);
+            var inn = SecurityHelpers.NormalizeInn(input.CompanyInn);
             var description = CleanOptionalString(input.CompanyDescription, "companyDescription", 500);
             var directorName = CleanRequiredString(input.DirectorName, "directorName", 120);
+            var directorLogin = SecurityHelpers.NormalizeLogin(input.DirectorLogin);
             var position = CleanOptionalString(input.DirectorPosition, "directorPosition", 120) ?? "Director";
             var phone = SecurityHelpers.NormalizePhone(input.Phone);
             var passwordHash = SecurityHelpers.HashPassword(input.Password);
 
             AssertCompanyPhoneIsAvailable(state, phone);
+            AssertCompanyLoginIsAvailable(state, directorLogin);
 
             var company = new Company
             {
                 Id = SecurityHelpers.CreateId("company"),
                 Name = companyName,
+                Inn = inn,
                 Description = description,
                 CreatedAt = nowIso,
                 Settings = new CompanySettings
@@ -48,6 +52,7 @@ public sealed class AppService
                 Id = SecurityHelpers.CreateId("user"),
                 CompanyId = company.Id,
                 FullName = directorName,
+                Login = directorLogin,
                 Phone = phone,
                 Role = Roles.Director,
                 Position = position,
@@ -79,13 +84,16 @@ public sealed class AppService
             var nowIso = DateTimeOffset.UtcNow.ToString("O");
             CleanupExpiredSessions(state, nowIso);
 
-            var phone = SecurityHelpers.NormalizePhone(input.Phone);
+            var login = NormalizeLoginOrPhone(input.Login, input.Phone);
             var password = input.Password ?? string.Empty;
-            var user = state.Users.FirstOrDefault(entry => entry.Phone == phone && entry.IsActive);
+            var user = state.Users.FirstOrDefault(entry =>
+                entry.IsActive &&
+                (string.Equals(entry.Login, login, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.Phone, login, StringComparison.Ordinal)));
 
             if (user is null || !SecurityHelpers.VerifyPassword(password, user.PasswordHash))
             {
-                throw new AppException(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", "Invalid phone number or password");
+                throw new AppException(StatusCodes.Status401Unauthorized, "UNAUTHORIZED", "Invalid login or password");
             }
 
             var company = FindCompanyOrThrow(state, user.CompanyId);
@@ -201,12 +209,14 @@ public sealed class AppService
             var company = FindCompanyOrThrow(state, actor.CompanyId);
             var role = (input.Role ?? string.Empty).Trim();
             var fullName = CleanRequiredString(input.FullName, "fullName", 120);
+            var login = SecurityHelpers.NormalizeLogin(input.Login);
             var phone = SecurityHelpers.NormalizePhone(input.Phone);
             var position = CleanOptionalString(input.Position, "position", 120) ?? "Employee";
             var avatarUrl = CleanOptionalString(input.AvatarUrl, "avatarUrl", 500);
             var passwordHash = SecurityHelpers.HashPassword(input.Password);
 
             AssertRoleCanBeCreated(role);
+            AssertCompanyLoginIsAvailable(state, login);
             AssertCompanyPhoneIsAvailable(state, phone);
 
             var user = new UserAccount
@@ -214,6 +224,7 @@ public sealed class AppService
                 Id = SecurityHelpers.CreateId("user"),
                 CompanyId = company.Id,
                 FullName = fullName,
+                Login = login,
                 Phone = phone,
                 Role = role,
                 Position = position,
@@ -240,6 +251,7 @@ public sealed class AppService
             var nowIso = DateTimeOffset.UtcNow.ToString("O");
             var title = CleanRequiredString(input.Title, "title", 160);
             var description = CleanRequiredString(input.Description, "description", 3000);
+            var votingType = (input.VotingType ?? string.Empty).Trim().ToLowerInvariant();
             var currentMonthIdeas = state.Ideas.Where(idea =>
                 idea.AuthorId == actor.Id &&
                 idea.CompanyId == actor.CompanyId &&
@@ -255,6 +267,7 @@ public sealed class AppService
                 Id = SecurityHelpers.CreateId("idea"),
                 CompanyId = actor.CompanyId,
                 AuthorId = actor.Id,
+                VotingType = votingType,
                 Title = title,
                 Description = description,
                 Status = IdeaStatuses.PendingModeration,
@@ -285,8 +298,9 @@ public sealed class AppService
             "mine" => ideas.Where(idea => idea.AuthorId == actor.Id),
             "moderation" => ideas.Where(idea => idea.Status == IdeaStatuses.PendingModeration),
             "director_review" => ideas.Where(idea => idea.Status == IdeaStatuses.DirectorReview),
+            "ai" => ideas.Where(idea => GetAiRecommendationScore(idea) >= 60),
             "all" => ideas,
-            _ => throw new AppException(StatusCodes.Status400BadRequest, "BAD_REQUEST", "scope must be one of: active, archive, mine, moderation, director_review, all")
+            _ => throw new AppException(StatusCodes.Status400BadRequest, "BAD_REQUEST", "scope must be one of: active, archive, mine, moderation, director_review, ai, all")
         };
 
         if (!string.IsNullOrWhiteSpace(statusFilter))
@@ -305,7 +319,11 @@ public sealed class AppService
             .Select(idea => BuildIdeaDto(state, idea, actor))
             .ToList();
 
-        items = string.Equals(sort, "support", StringComparison.Ordinal)
+        items = string.Equals(scope, "ai", StringComparison.Ordinal)
+            ? items.OrderByDescending(item => item.AiScore)
+                .ThenByDescending(item => DateTimeOffset.Parse(item.Timeline.UpdatedAt))
+                .ToList()
+            : string.Equals(sort, "support", StringComparison.Ordinal)
             ? items.OrderByDescending(item => item.Votes.ApprovalPercent)
                 .ThenByDescending(item => DateTimeOffset.Parse(item.Timeline.UpdatedAt))
                 .ToList()
@@ -478,6 +496,7 @@ public sealed class AppService
         {
             Id = company.Id,
             Name = company.Name,
+            Inn = company.Inn,
             Description = company.Description,
             CreatedAt = company.CreatedAt,
             Settings = company.Settings
@@ -491,6 +510,7 @@ public sealed class AppService
             Id = user.Id,
             CompanyId = user.CompanyId,
             FullName = user.FullName,
+            Login = string.IsNullOrWhiteSpace(user.Login) ? user.Phone : user.Login,
             Phone = user.Phone,
             Role = user.Role,
             Position = user.Position,
@@ -556,11 +576,15 @@ public sealed class AppService
             ? null
             : state.Votes.FirstOrDefault(vote => vote.IdeaId == idea.Id && vote.UserId == viewer.Id);
         var votes = GetVoteSummary(state, idea);
+        var aiScore = GetAiRecommendationScore(idea);
 
         return new IdeaDto
         {
             Id = idea.Id,
             CompanyId = idea.CompanyId,
+            VotingType = string.IsNullOrWhiteSpace(idea.VotingType)
+                ? VotingTypes.Standard
+                : idea.VotingType,
             Title = idea.Title,
             Description = idea.Description,
             DescriptionPreview = idea.Description.Length > 200
@@ -606,7 +630,9 @@ public sealed class AppService
             },
             AvailableActions = viewer is null
                 ? new IdeaAvailableActionsDto()
-                : BuildAvailableActions(state, idea, viewer)
+                : BuildAvailableActions(state, idea, viewer),
+            AiScore = aiScore,
+            AiRecommended = aiScore >= 60
         };
     }
 
@@ -667,10 +693,37 @@ public sealed class AppService
 
     private static void AssertCompanyPhoneIsAvailable(AppState state, string phone)
     {
-        if (state.Users.Any(user => user.Phone == phone))
+        if (state.Users.Any(user =>
+                user.Phone == phone ||
+                string.Equals(user.Login, phone, StringComparison.OrdinalIgnoreCase)))
         {
             throw new AppException(StatusCodes.Status409Conflict, "CONFLICT", "A user with this phone number already exists");
         }
+    }
+
+    private static void AssertCompanyLoginIsAvailable(AppState state, string login)
+    {
+        if (state.Users.Any(user =>
+                string.Equals(user.Login, login, StringComparison.OrdinalIgnoreCase) ||
+                user.Phone == login))
+        {
+            throw new AppException(StatusCodes.Status409Conflict, "CONFLICT", "A user with this login already exists");
+        }
+    }
+
+    private static string NormalizeLoginOrPhone(string? login, string? phone)
+    {
+        if (!string.IsNullOrWhiteSpace(login))
+        {
+            return SecurityHelpers.NormalizeLogin(login);
+        }
+
+        if (!string.IsNullOrWhiteSpace(phone))
+        {
+            return SecurityHelpers.NormalizePhone(phone);
+        }
+
+        throw new AppException(StatusCodes.Status400BadRequest, "BAD_REQUEST", "login is required");
     }
 
     private static void AssertRoleCanBeCreated(string role)
@@ -686,6 +739,47 @@ public sealed class AppService
         var current = DateTimeOffset.Parse(nowIso).UtcDateTime;
         var created = DateTimeOffset.Parse(ideaCreatedAt).UtcDateTime;
         return current.Year == created.Year && current.Month == created.Month;
+    }
+
+    private static int GetAiRecommendationScore(Idea idea)
+    {
+        var text = $"{idea.Title} {idea.Description}".ToLowerInvariant();
+        var score = 0;
+
+        var positiveTerms = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["автомат"] = 18,
+            ["ускор"] = 12,
+            ["оптимиза"] = 15,
+            ["эконом"] = 14,
+            ["улучш"] = 10,
+            ["удоб"] = 8,
+            ["цифров"] = 16,
+            ["сокращ"] = 10,
+            ["эффектив"] = 12,
+            ["контрол"] = 8,
+            ["качест"] = 9
+        };
+
+        foreach (var (term, weight) in positiveTerms)
+        {
+            if (text.Contains(term, StringComparison.Ordinal))
+            {
+                score += weight;
+            }
+        }
+
+        if (text.Length > 300)
+        {
+            score += 4;
+        }
+
+        if (idea.Status == IdeaStatuses.Voting)
+        {
+            score += 8;
+        }
+
+        return Math.Min(score, 100);
     }
 
     private static string CleanRequiredString(string? value, string fieldName, int maxLength)
