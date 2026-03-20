@@ -5,10 +5,10 @@ namespace Backend.Services;
 
 public sealed class AppService
 {
-    private readonly FileStateStore _store;
+    private readonly IAppStateStore _store;
     private readonly AppOptions _options;
 
-    public AppService(FileStateStore store, AppOptions options)
+    public AppService(IAppStateStore store, AppOptions options)
     {
         _store = store;
         _options = options;

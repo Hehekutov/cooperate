@@ -26,3 +26,6 @@
 /Users/sskaaat/DevProjects/cooperate/Backend/obj/Debug/net10.0/Backend.pdb
 /Users/sskaaat/DevProjects/cooperate/Backend/obj/Debug/net10.0/Backend.genruntimeconfig.cache
 /Users/sskaaat/DevProjects/cooperate/Backend/obj/Debug/net10.0/ref/Backend.dll
+/Users/sskaaat/DevProjects/cooperate/Backend/bin/Debug/net10.0/Npgsql.dll
+/Users/sskaaat/DevProjects/cooperate/Backend/obj/Debug/net10.0/Backend.csproj.AssemblyReference.cache
+/Users/sskaaat/DevProjects/cooperate/Backend/obj/Debug/net10.0/Backend.csproj.Up2Date

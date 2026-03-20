@@ -1,8 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "G5InAyl4UEQ=",
+  "dgSpecHash": "/oGStGnul/U=",
   "success": true,
   "projectFilePath": "/Users/sskaaat/DevProjects/cooperate/Backend/Backend.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "/Users/sskaaat/.nuget/packages/npgsql/9.0.3/npgsql.9.0.3.nupkg.sha512"
+  ],
   "logs": []
 }

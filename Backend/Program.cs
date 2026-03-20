@@ -3,10 +3,15 @@ using Backend.Api;
 using Backend.Domain;
 using Backend.Infrastructure;
 using Backend.Services;
+using Npgsql;
 
 var appOptions = new AppOptions
 {
-    DataFile = Environment.GetEnvironmentVariable("DATA_FILE") ?? Path.Combine(Directory.GetCurrentDirectory(), "data/app-data.json"),
+    DatabaseConnectionString =
+        Environment.GetEnvironmentVariable("SUPABASE_DB_CONNECTION") ??
+        Environment.GetEnvironmentVariable("SUPABASE_DATABASE_URL") ??
+        Environment.GetEnvironmentVariable("DATABASE_URL"),
+    DatabaseSchema = Environment.GetEnvironmentVariable("DATABASE_SCHEMA") ?? "public",
     SessionTtlHours = ParseInt(Environment.GetEnvironmentVariable("SESSION_TTL_HOURS"), 24 * 7),
     IdeaMonthlyLimit = ParseInt(Environment.GetEnvironmentVariable("IDEA_MONTHLY_LIMIT"), 3),
     CorsOrigin = Environment.GetEnvironmentVariable("CORS_ORIGIN") ?? "*"
@@ -15,7 +20,22 @@ var appOptions = new AppOptions
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton(appOptions);
-builder.Services.AddSingleton<FileStateStore>(_ => new FileStateStore(appOptions.DataFile));
+
+if (!appOptions.UseDatabase)
+{
+    throw new InvalidOperationException("SUPABASE_DB_CONNECTION or DATABASE_URL must be set");
+}
+
+builder.Services.AddSingleton(_ =>
+{
+    var connectionString = PostgresConnectionStringFactory.Normalize(appOptions.DatabaseConnectionString);
+    var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+    return dataSourceBuilder.Build();
+});
+builder.Services.AddSingleton<IAppStateStore>(serviceProvider => new PostgresStateStore(
+    serviceProvider.GetRequiredService<NpgsqlDataSource>(),
+    appOptions.DatabaseSchema));
+
 builder.Services.AddSingleton<AppService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -40,8 +60,12 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
-var store = app.Services.GetRequiredService<FileStateStore>();
+var store = app.Services.GetRequiredService<IAppStateStore>();
 await store.EnsureAsync();
+
+app.Logger.LogInformation(
+    "Cooperate backend storage provider: {StorageProvider}",
+    "Supabase/Postgres");
 
 app.UseCors();
 app.Use(async (context, next) =>

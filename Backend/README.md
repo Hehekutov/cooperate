@@ -17,15 +17,14 @@ ASP.NET Core backend for an internal company platform where employees create ide
   - `rejected_by_director`
 - monthly rate limit: no more than 3 ideas per employee per UTC month
 - active and archive idea views
-- JSON-file persistence without external database dependencies
+- Supabase/Postgres persistence with relational tables
 - seed mode built into the application
 
 ## Tech stack
 
 - .NET 10 SDK
 - ASP.NET Core Minimal API
-- filesystem storage in `data/app-data.json`
-- no external database or third-party packages
+- Supabase Postgres via `Npgsql`
 
 ## Run
 
@@ -35,6 +34,19 @@ dotnet run
 ```
 
 The server starts on `http://localhost:5000` and `https://localhost:5001` by default.
+
+To run against Supabase, copy `Backend/.env.example` into your local environment and set `SUPABASE_DB_CONNECTION` to the Postgres connection string from the Supabase dashboard.
+
+The backend stores its state in relational tables. By default it creates them in the `public` schema so they are visible in the Supabase dashboard:
+
+- `companies`
+- `user_accounts`
+- `ideas`
+- `idea_voting_eligible_users`
+- `idea_votes`
+- `app_sessions`
+
+The matching SQL migration lives in `Backend/sql/002_create_relational_storage.sql`.
 
 Quick local smoke check:
 
@@ -58,7 +70,10 @@ Seed credentials:
 ## Environment variables
 
 - `ASPNETCORE_URLS` - bind address, example `http://0.0.0.0:3000`
-- `DATA_FILE` - path to the JSON storage file, default `data/app-data.json`
+- `SUPABASE_DB_CONNECTION` - preferred Supabase/Postgres connection string
+- `SUPABASE_DATABASE_URL` - alias for `SUPABASE_DB_CONNECTION`
+- `DATABASE_URL` - generic alias for the same connection string
+- `DATABASE_SCHEMA` - database schema for backend storage, default `public`
 - `CORS_ORIGIN` - allowed origin for browser requests, default `*`
 - `SESSION_TTL_HOURS` - token lifetime, default `168`
 - `IDEA_MONTHLY_LIMIT` - ideas per user per month, default `3`
