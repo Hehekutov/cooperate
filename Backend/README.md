@@ -35,7 +35,7 @@ dotnet run
 
 The server starts on `http://localhost:5000` and `https://localhost:5001` by default.
 
-To run against Supabase, copy `Backend/.env.example` into your local environment and set `SUPABASE_DB_CONNECTION` to the Postgres connection string from the Supabase dashboard.
+To run against Supabase, copy `Backend/.env.example` to `Backend/.env` and set `SUPABASE_DB_CONNECTION` to the Postgres connection string from the Supabase dashboard. The backend now auto-loads `Backend/.env` for local development, while shell environment variables still take precedence.
 
 The backend stores its state in relational tables. By default it creates them in the `public` schema so they are visible in the Supabase dashboard:
 

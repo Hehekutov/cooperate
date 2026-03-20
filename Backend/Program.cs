@@ -5,6 +5,9 @@ using Backend.Infrastructure;
 using Backend.Services;
 using Npgsql;
 
+var builder = WebApplication.CreateBuilder(args);
+LoadLocalEnvironmentFiles(builder.Environment.ContentRootPath);
+
 var appOptions = new AppOptions
 {
     DatabaseConnectionString =
@@ -17,13 +20,13 @@ var appOptions = new AppOptions
     CorsOrigin = Environment.GetEnvironmentVariable("CORS_ORIGIN") ?? "*"
 };
 
-var builder = WebApplication.CreateBuilder(args);
-
 builder.Services.AddSingleton(appOptions);
 
 if (!appOptions.UseDatabase)
 {
-    throw new InvalidOperationException("SUPABASE_DB_CONNECTION or DATABASE_URL must be set");
+    throw new InvalidOperationException(
+        "Database connection string is missing. Set SUPABASE_DB_CONNECTION or DATABASE_URL in the shell, " +
+        "or create Backend/.env from Backend/.env.example. In Supabase Dashboard, open Connect and copy the Postgres connection string.");
 }
 
 builder.Services.AddSingleton(_ =>
@@ -127,4 +130,64 @@ app.Run();
 static int ParseInt(string? rawValue, int defaultValue)
 {
     return int.TryParse(rawValue, out var parsed) ? parsed : defaultValue;
+}
+
+static void LoadLocalEnvironmentFiles(string contentRootPath)
+{
+    foreach (var path in GetLocalEnvironmentFileCandidates(contentRootPath))
+    {
+        if (!File.Exists(path))
+        {
+            continue;
+        }
+
+        foreach (var rawLine in File.ReadLines(path))
+        {
+            var line = rawLine.Trim();
+
+            if (line.Length == 0 || line.StartsWith('#'))
+            {
+                continue;
+            }
+
+            var delimiterIndex = line.IndexOf('=');
+            if (delimiterIndex <= 0)
+            {
+                continue;
+            }
+
+            var key = line[..delimiterIndex].Trim();
+            if (key.Length == 0 || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key)))
+            {
+                continue;
+            }
+
+            var value = NormalizeEnvValue(line[(delimiterIndex + 1)..]);
+            Environment.SetEnvironmentVariable(key, value);
+        }
+
+        return;
+    }
+}
+
+static IEnumerable<string> GetLocalEnvironmentFileCandidates(string contentRootPath)
+{
+    yield return Path.Combine(contentRootPath, ".env");
+    yield return Path.Combine(contentRootPath, "Backend", ".env");
+}
+
+static string NormalizeEnvValue(string rawValue)
+{
+    var value = rawValue.Trim();
+
+    if (value.Length >= 2 &&
+        ((value[0] == '"' && value[^1] == '"') || (value[0] == '\'' && value[^1] == '\'')))
+    {
+        value = value[1..^1];
+    }
+
+    return value
+        .Replace("\\n", "\n")
+        .Replace("\\r", "\r")
+        .Replace("\\t", "\t");
 }
