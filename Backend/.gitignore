@@ -3,5 +3,5 @@ data/app-data.json
 .DS_Store
 bin
 obj
-reports
+reports/
 README.md

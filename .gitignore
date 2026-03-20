@@ -3,3 +3,4 @@ sripts/
 scripts/
 tmp/
 reports/
+.playwright-cli/
