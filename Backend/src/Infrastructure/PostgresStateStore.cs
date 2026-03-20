@@ -14,6 +14,8 @@ public sealed class PostgresStateStore : IAppStateStore
     private readonly string _ideaEligibilityTable;
     private readonly string _votesTable;
     private readonly string _sessionsTable;
+    private readonly SemaphoreSlim _ensureSemaphore = new(1, 1);
+    private bool _storageEnsured;
 
     public PostgresStateStore(
         NpgsqlDataSource dataSource,
@@ -32,19 +34,40 @@ public sealed class PostgresStateStore : IAppStateStore
 
     public async Task EnsureAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        await AcquireStateLockAsync(connection, transaction, cancellationToken);
-        await EnsureStorageAsync(connection, transaction, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        if (_storageEnsured)
+        {
+            return;
+        }
+
+        await _ensureSemaphore.WaitAsync(cancellationToken);
+
+        try
+        {
+            if (_storageEnsured)
+            {
+                return;
+            }
+
+            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await AcquireStateLockAsync(connection, transaction, cancellationToken);
+            await EnsureStorageAsync(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            _storageEnsured = true;
+        }
+        finally
+        {
+            _ensureSemaphore.Release();
+        }
     }
 
     public async Task<AppState> GetStateAsync(CancellationToken cancellationToken = default)
     {
+        await EnsureAsync(cancellationToken);
+
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await AcquireStateLockAsync(connection, transaction, cancellationToken);
-        await EnsureStorageAsync(connection, transaction, cancellationToken);
         var state = await ReadStateAsync(connection, transaction, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return state;
@@ -52,11 +75,11 @@ public sealed class PostgresStateStore : IAppStateStore
 
     public async Task<T> UpdateAsync<T>(Func<AppState, T> mutator, CancellationToken cancellationToken = default)
     {
+        await EnsureAsync(cancellationToken);
+
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await AcquireStateLockAsync(connection, transaction, cancellationToken);
-        await EnsureStorageAsync(connection, transaction, cancellationToken);
-
         var state = await ReadStateAsync(connection, transaction, cancellationToken);
         var result = mutator(state);
 
@@ -76,10 +99,11 @@ public sealed class PostgresStateStore : IAppStateStore
 
     public async Task SetStateAsync(AppState state, CancellationToken cancellationToken = default)
     {
+        await EnsureAsync(cancellationToken);
+
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await AcquireStateLockAsync(connection, transaction, cancellationToken);
-        await EnsureStorageAsync(connection, transaction, cancellationToken);
         await WriteStateAsync(connection, transaction, state, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -107,32 +131,6 @@ public sealed class PostgresStateStore : IAppStateStore
         {
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
-
-        if (await HasAnyStateDataAsync(connection, transaction, cancellationToken))
-        {
-            return;
-        }
-    }
-
-    private async Task<bool> HasAnyStateDataAsync(
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        CancellationToken cancellationToken)
-    {
-        await using var command = new NpgsqlCommand(
-            $$"""
-            select
-                exists(select 1 from {{_companiesTable}}) or
-                exists(select 1 from {{_usersTable}}) or
-                exists(select 1 from {{_ideasTable}}) or
-                exists(select 1 from {{_votesTable}}) or
-                exists(select 1 from {{_sessionsTable}});
-            """,
-            connection,
-            transaction);
-
-        var result = await command.ExecuteScalarAsync(cancellationToken);
-        return result is true;
     }
 
     private async Task<AppState> ReadStateAsync(

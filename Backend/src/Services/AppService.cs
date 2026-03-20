@@ -7,6 +7,12 @@ public sealed class AppService
 {
     private readonly IAppStateStore _store;
     private readonly AppOptions _options;
+    private static readonly IReadOnlyDictionary<string, int> RoleSortOrder = new Dictionary<string, int>(StringComparer.Ordinal)
+    {
+        [Roles.Director] = 0,
+        [Roles.Admin] = 1,
+        [Roles.Employee] = 2
+    };
 
     public AppService(IAppStateStore store, AppOptions options)
     {
@@ -18,8 +24,9 @@ public sealed class AppService
     {
         return _store.UpdateAsync(state =>
         {
-            var nowIso = DateTimeOffset.UtcNow.ToString("O");
-            CleanupExpiredSessions(state, nowIso);
+            var now = DateTimeOffset.UtcNow;
+            var nowIso = now.ToString("O");
+            CleanupExpiredSessions(state, now);
 
             var companyName = CleanRequiredString(input.CompanyName, "companyName", 120);
             var inn = SecurityHelpers.NormalizeInn(input.CompanyInn);
@@ -65,7 +72,7 @@ public sealed class AppService
             state.Companies.Add(company);
             state.Users.Add(director);
 
-            var session = CreateSession(state, director.Id, nowIso);
+            var session = CreateSession(state, director.Id, now);
 
             return new AuthResponse
             {
@@ -81,8 +88,9 @@ public sealed class AppService
     {
         return _store.UpdateAsync(state =>
         {
-            var nowIso = DateTimeOffset.UtcNow.ToString("O");
-            CleanupExpiredSessions(state, nowIso);
+            var now = DateTimeOffset.UtcNow;
+            var nowIso = now.ToString("O");
+            CleanupExpiredSessions(state, now);
 
             var login = NormalizeLoginOrPhone(input.Login, input.Phone);
             var password = input.Password ?? string.Empty;
@@ -97,7 +105,7 @@ public sealed class AppService
             }
 
             var company = FindCompanyOrThrow(state, user.CompanyId);
-            var session = CreateSession(state, user.Id, nowIso);
+            var session = CreateSession(state, user.Id, now);
 
             return new AuthResponse
             {
@@ -175,16 +183,10 @@ public sealed class AppService
     public async Task<EmployeeListDto> ListEmployeesAsync(UserDto actor, CancellationToken cancellationToken = default)
     {
         var state = await _store.GetStateAsync(cancellationToken);
-        var roleOrder = new Dictionary<string, int>(StringComparer.Ordinal)
-        {
-            [Roles.Director] = 0,
-            [Roles.Admin] = 1,
-            [Roles.Employee] = 2
-        };
 
         var items = state.Users
             .Where(user => user.CompanyId == actor.CompanyId && user.IsActive)
-            .OrderBy(user => roleOrder[user.Role])
+            .OrderBy(user => RoleSortOrder[user.Role])
             .ThenBy(user => user.FullName, StringComparer.Ordinal)
             .Select(SanitizeUser)
             .ToList();
@@ -248,16 +250,17 @@ public sealed class AppService
 
         return _store.UpdateAsync(state =>
         {
-            var nowIso = DateTimeOffset.UtcNow.ToString("O");
+            var now = DateTimeOffset.UtcNow;
+            var nowIso = now.ToString("O");
             var title = CleanRequiredString(input.Title, "title", 160);
             var description = CleanRequiredString(input.Description, "description", 3000);
             var votingType = (input.VotingType ?? string.Empty).Trim().ToLowerInvariant();
-            var currentMonthIdeas = state.Ideas.Where(idea =>
+            var currentMonthIdeasCount = state.Ideas.Count(idea =>
                 idea.AuthorId == actor.Id &&
                 idea.CompanyId == actor.CompanyId &&
-                IsIdeaCreatedInSameUtcMonth(idea.CreatedAt, nowIso)).ToList();
+                IsIdeaCreatedInSameUtcMonth(idea.CreatedAt, now));
 
-            if (currentMonthIdeas.Count >= _options.IdeaMonthlyLimit)
+            if (currentMonthIdeasCount >= _options.IdeaMonthlyLimit)
             {
                 throw new AppException(StatusCodes.Status409Conflict, "CONFLICT", $"Monthly limit reached: only {_options.IdeaMonthlyLimit} ideas are allowed per user");
             }
@@ -276,7 +279,8 @@ public sealed class AppService
             };
 
             state.Ideas.Add(idea);
-            return BuildIdeaDto(state, idea, actor);
+            var context = BuildIdeaProjectionContext(state, [idea], actor);
+            return BuildIdeaDto(idea, actor, context);
         }, cancellationToken);
     }
 
@@ -315,24 +319,27 @@ public sealed class AppService
                 idea.Description.Contains(searchQuery, StringComparison.OrdinalIgnoreCase));
         }
 
-        var items = ideas
-            .Select(idea => BuildIdeaDto(state, idea, actor))
-            .ToList();
+        var filteredIdeas = ideas.ToList();
+        var context = BuildIdeaProjectionContext(state, filteredIdeas, actor);
 
-        items = string.Equals(scope, "ai", StringComparison.Ordinal)
-            ? items.OrderByDescending(item => item.AiScore)
-                .ThenByDescending(item => DateTimeOffset.Parse(item.Timeline.UpdatedAt))
+        filteredIdeas = string.Equals(scope, "ai", StringComparison.Ordinal)
+            ? filteredIdeas.OrderByDescending(idea => context.AiScoresByIdeaId[idea.Id])
+                .ThenByDescending(idea => context.UpdatedAtByIdeaId[idea.Id])
                 .ToList()
             : string.Equals(sort, "support", StringComparison.Ordinal)
-            ? items.OrderByDescending(item => item.Votes.ApprovalPercent)
-                .ThenByDescending(item => DateTimeOffset.Parse(item.Timeline.UpdatedAt))
+            ? filteredIdeas.OrderByDescending(idea => context.VoteSummariesByIdeaId[idea.Id].ApprovalPercent)
+                .ThenByDescending(idea => context.UpdatedAtByIdeaId[idea.Id])
                 .ToList()
-            : items.OrderByDescending(item => DateTimeOffset.Parse(item.Timeline.UpdatedAt)).ToList();
+            : filteredIdeas.OrderByDescending(idea => context.UpdatedAtByIdeaId[idea.Id]).ToList();
 
         if (limit is > 0)
         {
-            items = items.Take(limit.Value).ToList();
+            filteredIdeas = filteredIdeas.Take(limit.Value).ToList();
         }
+
+        var items = filteredIdeas
+            .Select(idea => BuildIdeaDto(idea, actor, context))
+            .ToList();
 
         return new IdeaListDto
         {
@@ -345,7 +352,8 @@ public sealed class AppService
     {
         var state = await _store.GetStateAsync(cancellationToken);
         var idea = FindIdeaOrThrow(state, actor.CompanyId, ideaId);
-        return BuildIdeaDto(state, idea, actor);
+        var context = BuildIdeaProjectionContext(state, [idea], actor);
+        return BuildIdeaDto(idea, actor, context);
     }
 
     public Task<IdeaDto> ModerateIdeaAsync(UserDto actor, string ideaId, ModerateIdeaRequest input, CancellationToken cancellationToken = default)
@@ -394,7 +402,8 @@ public sealed class AppService
                 idea.VotingEligibleUserIds = [];
             }
 
-            return BuildIdeaDto(state, idea, actor);
+            var context = BuildIdeaProjectionContext(state, [idea], actor);
+            return BuildIdeaDto(idea, actor, context);
         }, cancellationToken);
     }
 
@@ -458,7 +467,8 @@ public sealed class AppService
             }
 
             idea.UpdatedAt = nowIso;
-            return BuildIdeaDto(state, idea, actor);
+            var context = BuildIdeaProjectionContext(state, [idea], actor);
+            return BuildIdeaDto(idea, actor, context);
         }, cancellationToken);
     }
 
@@ -485,8 +495,8 @@ public sealed class AppService
             idea.ArchivedAt = nowIso;
             idea.UpdatedAt = nowIso;
             idea.Status = input.Approved ? IdeaStatuses.ApprovedByDirector : IdeaStatuses.RejectedByDirector;
-
-            return BuildIdeaDto(state, idea, actor);
+            var context = BuildIdeaProjectionContext(state, [idea], actor);
+            return BuildIdeaDto(idea, actor, context);
         }, cancellationToken);
     }
 
@@ -520,11 +530,10 @@ public sealed class AppService
         };
     }
 
-    private static void CleanupExpiredSessions(AppState state, string nowIso)
+    private static void CleanupExpiredSessions(AppState state, DateTimeOffset now)
     {
-        var now = DateTimeOffset.Parse(nowIso);
         state.Sessions = state.Sessions
-            .Where(session => DateTimeOffset.Parse(session.ExpiresAt) > now)
+            .Where(session => ParseTimestamp(session.ExpiresAt) > now)
             .ToList();
     }
 
@@ -542,41 +551,51 @@ public sealed class AppService
 
     private static VoteSummaryDto GetVoteSummary(AppState state, Idea idea)
     {
-        var votes = state.Votes.Where(vote => vote.IdeaId == idea.Id).ToList();
-        var support = votes.Count(vote => vote.Value == "for");
-        var against = votes.Count - support;
-        var eligibleVoters = idea.VotingEligibleUserIds.Count;
-        var approvalPercent = eligibleVoters > 0
-            ? (int)Math.Round((double)support / eligibleVoters * 100, MidpointRounding.AwayFromZero)
-            : 0;
+        var support = 0;
+        var total = 0;
 
-        return new VoteSummaryDto
+        foreach (var vote in state.Votes)
         {
-            Support = support,
-            Against = against,
-            Total = votes.Count,
-            EligibleVoters = eligibleVoters,
-            RemainingVotes = Math.Max(eligibleVoters - votes.Count, 0),
-            ApprovalPercent = approvalPercent,
-            ThresholdPercent = BusinessRules.VoteApprovalPercent,
-            Passed = approvalPercent > BusinessRules.VoteApprovalPercent
-        };
+            if (vote.IdeaId != idea.Id)
+            {
+                continue;
+            }
+
+            total++;
+
+            if (vote.Value == "for")
+            {
+                support++;
+            }
+        }
+
+        return BuildVoteSummary(idea.VotingEligibleUserIds.Count, support, total);
     }
 
-    private IdeaDto BuildIdeaDto(AppState state, Idea idea, UserDto? viewer)
+    private IdeaDto BuildIdeaDto(Idea idea, UserDto? viewer, IdeaProjectionContext context)
     {
-        var author = state.Users.FirstOrDefault(user => user.Id == idea.AuthorId);
-        var moderator = string.IsNullOrWhiteSpace(idea.ModeratedBy)
-            ? null
-            : state.Users.FirstOrDefault(user => user.Id == idea.ModeratedBy);
-        var director = string.IsNullOrWhiteSpace(idea.DirectorDecisionBy)
-            ? null
-            : state.Users.FirstOrDefault(user => user.Id == idea.DirectorDecisionBy);
-        var viewerVote = viewer is null
-            ? null
-            : state.Votes.FirstOrDefault(vote => vote.IdeaId == idea.Id && vote.UserId == viewer.Id);
-        var votes = GetVoteSummary(state, idea);
-        var aiScore = GetAiRecommendationScore(idea);
+        context.UsersById.TryGetValue(idea.AuthorId, out var author);
+        UserAccount? moderator = null;
+        UserAccount? director = null;
+        IdeaVote? viewerVote = null;
+
+        if (!string.IsNullOrWhiteSpace(idea.ModeratedBy))
+        {
+            context.UsersById.TryGetValue(idea.ModeratedBy, out moderator);
+        }
+
+        if (!string.IsNullOrWhiteSpace(idea.DirectorDecisionBy))
+        {
+            context.UsersById.TryGetValue(idea.DirectorDecisionBy, out director);
+        }
+
+        if (viewer is not null)
+        {
+            context.ViewerVotesByIdeaId.TryGetValue(idea.Id, out viewerVote);
+        }
+
+        var votes = context.VoteSummariesByIdeaId[idea.Id];
+        var aiScore = context.AiScoresByIdeaId[idea.Id];
 
         return new IdeaDto
         {
@@ -630,16 +649,14 @@ public sealed class AppService
             },
             AvailableActions = viewer is null
                 ? new IdeaAvailableActionsDto()
-                : BuildAvailableActions(state, idea, viewer),
+                : BuildAvailableActions(idea, viewer, viewerVote),
             AiScore = aiScore,
             AiRecommended = aiScore >= 60
         };
     }
 
-    private static IdeaAvailableActionsDto BuildAvailableActions(AppState state, Idea idea, UserDto viewer)
+    private static IdeaAvailableActionsDto BuildAvailableActions(Idea idea, UserDto viewer, IdeaVote? viewerVote)
     {
-        var viewerVote = state.Votes.FirstOrDefault(vote => vote.IdeaId == idea.Id && vote.UserId == viewer.Id);
-
         return new IdeaAvailableActionsDto
         {
             CanModerate =
@@ -658,26 +675,69 @@ public sealed class AppService
 
     private static CompanyStatsDto BuildCompanyStats(AppState state, string companyId)
     {
-        var ideas = state.Ideas.Where(idea => idea.CompanyId == companyId).ToList();
-        var activeEmployees = state.Users.Where(user => user.CompanyId == companyId && user.IsActive).ToList();
+        var employees = 0;
+        var totalIdeas = 0;
+        var activeIdeas = 0;
+        var archiveIdeas = 0;
+        var pendingModeration = 0;
+        var waitingForDirector = 0;
+
+        foreach (var user in state.Users)
+        {
+            if (user.CompanyId == companyId && user.IsActive)
+            {
+                employees++;
+            }
+        }
+
+        foreach (var idea in state.Ideas)
+        {
+            if (idea.CompanyId != companyId)
+            {
+                continue;
+            }
+
+            totalIdeas++;
+
+            if (BusinessRules.ActiveIdeaStatuses.Contains(idea.Status))
+            {
+                activeIdeas++;
+            }
+
+            if (BusinessRules.ArchiveIdeaStatuses.Contains(idea.Status))
+            {
+                archiveIdeas++;
+            }
+
+            if (idea.Status == IdeaStatuses.PendingModeration)
+            {
+                pendingModeration++;
+            }
+
+            if (idea.Status == IdeaStatuses.DirectorReview)
+            {
+                waitingForDirector++;
+            }
+        }
 
         return new CompanyStatsDto
         {
-            Employees = activeEmployees.Count,
+            Employees = employees,
             Ideas = new CompanyIdeaStatsDto
             {
-                Total = ideas.Count,
-                Active = ideas.Count(idea => BusinessRules.ActiveIdeaStatuses.Contains(idea.Status)),
-                Archive = ideas.Count(idea => BusinessRules.ArchiveIdeaStatuses.Contains(idea.Status)),
-                PendingModeration = ideas.Count(idea => idea.Status == IdeaStatuses.PendingModeration),
-                WaitingForDirector = ideas.Count(idea => idea.Status == IdeaStatuses.DirectorReview)
+                Total = totalIdeas,
+                Active = activeIdeas,
+                Archive = archiveIdeas,
+                PendingModeration = pendingModeration,
+                WaitingForDirector = waitingForDirector
             }
         };
     }
 
-    private Session CreateSession(AppState state, string userId, string nowIso)
+    private Session CreateSession(AppState state, string userId, DateTimeOffset now)
     {
-        var expiresAt = DateTimeOffset.Parse(nowIso).AddHours(_options.SessionTtlHours).ToString("O");
+        var nowIso = now.ToString("O");
+        var expiresAt = now.AddHours(_options.SessionTtlHours).ToString("O");
         var session = new Session
         {
             Id = SecurityHelpers.CreateId("session"),
@@ -734,10 +794,10 @@ public sealed class AppService
         }
     }
 
-    private static bool IsIdeaCreatedInSameUtcMonth(string ideaCreatedAt, string nowIso)
+    private static bool IsIdeaCreatedInSameUtcMonth(string ideaCreatedAt, DateTimeOffset now)
     {
-        var current = DateTimeOffset.Parse(nowIso).UtcDateTime;
-        var created = DateTimeOffset.Parse(ideaCreatedAt).UtcDateTime;
+        var current = now.UtcDateTime;
+        var created = ParseTimestamp(ideaCreatedAt).UtcDateTime;
         return current.Year == created.Year && current.Month == created.Month;
     }
 
@@ -782,6 +842,80 @@ public sealed class AppService
         return Math.Min(score, 100);
     }
 
+    private static IdeaProjectionContext BuildIdeaProjectionContext(AppState state, IReadOnlyCollection<Idea> ideas, UserDto? viewer)
+    {
+        var usersById = state.Users.ToDictionary(user => user.Id, StringComparer.Ordinal);
+        var ideaIds = ideas.Select(idea => idea.Id).ToHashSet(StringComparer.Ordinal);
+        var voteCountersByIdeaId = new Dictionary<string, VoteCounter>(StringComparer.Ordinal);
+        var viewerVotesByIdeaId = new Dictionary<string, IdeaVote>(StringComparer.Ordinal);
+
+        foreach (var vote in state.Votes)
+        {
+            if (!ideaIds.Contains(vote.IdeaId))
+            {
+                continue;
+            }
+
+            voteCountersByIdeaId.TryGetValue(vote.IdeaId, out var voteCounter);
+            voteCounter.Total++;
+
+            if (vote.Value == "for")
+            {
+                voteCounter.Support++;
+            }
+
+            voteCountersByIdeaId[vote.IdeaId] = voteCounter;
+
+            if (viewer is not null && vote.UserId == viewer.Id)
+            {
+                viewerVotesByIdeaId[vote.IdeaId] = vote;
+            }
+        }
+
+        var voteSummariesByIdeaId = new Dictionary<string, VoteSummaryDto>(ideaIds.Count, StringComparer.Ordinal);
+        var aiScoresByIdeaId = new Dictionary<string, int>(ideaIds.Count, StringComparer.Ordinal);
+        var updatedAtByIdeaId = new Dictionary<string, DateTimeOffset>(ideaIds.Count, StringComparer.Ordinal);
+
+        foreach (var idea in ideas)
+        {
+            voteCountersByIdeaId.TryGetValue(idea.Id, out var voteCounter);
+            voteSummariesByIdeaId[idea.Id] = BuildVoteSummary(idea.VotingEligibleUserIds.Count, voteCounter.Support, voteCounter.Total);
+            aiScoresByIdeaId[idea.Id] = GetAiRecommendationScore(idea);
+            updatedAtByIdeaId[idea.Id] = ParseTimestamp(idea.UpdatedAt);
+        }
+
+        return new IdeaProjectionContext(
+            usersById,
+            voteSummariesByIdeaId,
+            viewerVotesByIdeaId,
+            aiScoresByIdeaId,
+            updatedAtByIdeaId);
+    }
+
+    private static VoteSummaryDto BuildVoteSummary(int eligibleVoters, int support, int total)
+    {
+        var approvalPercent = eligibleVoters > 0
+            ? (int)Math.Round((double)support / eligibleVoters * 100, MidpointRounding.AwayFromZero)
+            : 0;
+
+        return new VoteSummaryDto
+        {
+            Support = support,
+            Against = total - support,
+            Total = total,
+            EligibleVoters = eligibleVoters,
+            RemainingVotes = Math.Max(eligibleVoters - total, 0),
+            ApprovalPercent = approvalPercent,
+            ThresholdPercent = BusinessRules.VoteApprovalPercent,
+            Passed = approvalPercent > BusinessRules.VoteApprovalPercent
+        };
+    }
+
+    private static DateTimeOffset ParseTimestamp(string value)
+    {
+        return DateTimeOffset.Parse(value);
+    }
+
     private static string CleanRequiredString(string? value, string fieldName, int maxLength)
     {
         var text = (value ?? string.Empty).Trim();
@@ -820,4 +954,18 @@ public sealed class AppService
 
         return text;
     }
+
+    private struct VoteCounter
+    {
+        public int Support { get; set; }
+
+        public int Total { get; set; }
+    }
+
+    private sealed record IdeaProjectionContext(
+        IReadOnlyDictionary<string, UserAccount> UsersById,
+        IReadOnlyDictionary<string, VoteSummaryDto> VoteSummariesByIdeaId,
+        IReadOnlyDictionary<string, IdeaVote> ViewerVotesByIdeaId,
+        IReadOnlyDictionary<string, int> AiScoresByIdeaId,
+        IReadOnlyDictionary<string, DateTimeOffset> UpdatedAtByIdeaId);
 }
