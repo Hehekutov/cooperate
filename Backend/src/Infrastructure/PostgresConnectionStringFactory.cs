@@ -17,6 +17,7 @@ public static class PostgresConnectionStringFactory
         if (LooksLikeKeywordConnectionString(connectionString))
         {
             var builder = new NpgsqlConnectionStringBuilder(connectionString);
+            EnsureSecureDefaults(builder, connectionString);
             EnsureApplicationName(builder);
             return builder.ConnectionString;
         }
@@ -46,6 +47,7 @@ public static class PostgresConnectionStringFactory
             ApplyQuerySetting(uriBuilder, key, value);
         }
 
+        EnsureSecureDefaults(uriBuilder, connectionString);
         EnsureApplicationName(uriBuilder);
         return uriBuilder.ConnectionString;
     }
@@ -161,5 +163,33 @@ public static class PostgresConnectionStringFactory
         {
             builder.ApplicationName = "cooperate-backend";
         }
+    }
+
+    private static void EnsureSecureDefaults(NpgsqlConnectionStringBuilder builder, string rawConnectionString)
+    {
+        if (ContainsSslModeSetting(rawConnectionString) || IsLocalHost(builder.Host))
+        {
+            return;
+        }
+
+        builder.SslMode = SslMode.Require;
+    }
+
+    private static bool ContainsSslModeSetting(string connectionString)
+    {
+        return connectionString.Contains("sslmode=", StringComparison.OrdinalIgnoreCase) ||
+            connectionString.Contains("ssl mode=", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsLocalHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return true;
+        }
+
+        return host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+            host.Equals("::1", StringComparison.OrdinalIgnoreCase);
     }
 }
