@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect, useMemo, useState, type FormEventHandler } from 'react'
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type FormEventHandler } from 'react'
 import {
   ApiClientError,
   clearStoredSession,
@@ -274,6 +274,7 @@ function App() {
   const [ideaForm, setIdeaForm] = useState(defaultIdeaForm)
   const [employeeForm, setEmployeeForm] = useState(defaultEmployeeForm)
   const [actionComment, setActionComment] = useState('')
+  const activeSessionTokenRef = useRef<string | null>(session?.token ?? null)
 
   useEffect(() => {
     const onHashChange = () => {
@@ -289,6 +290,7 @@ function App() {
   }, [])
 
   const updateSession = useCallback((nextSession: AuthSession | null) => {
+    activeSessionTokenRef.current = nextSession?.token ?? null
     setSession(nextSession)
 
     if (!nextSession) {
@@ -313,6 +315,8 @@ function App() {
     setCompany(nextSession.company)
   }, [])
 
+  const isSessionCurrent = useCallback((token: string) => activeSessionTokenRef.current === token, [])
+
   const resolveIdeaById = (ideaId: string) => {
     if (selectedIdea?.id === ideaId) {
       return selectedIdea
@@ -322,8 +326,8 @@ function App() {
     return collections.flat().find((idea) => idea.id === ideaId) ?? null
   }
 
-  const handleUnauthorized = useCallback((error: unknown) => {
-    if (error instanceof ApiClientError && error.status === 401) {
+  const handleUnauthorized = useCallback((error: unknown, token?: string) => {
+    if (error instanceof ApiClientError && error.status === 401 && (!token || isSessionCurrent(token))) {
       updateSession(null)
       setNotice(makeNotice('error', 'Сессия истекла. Войдите снова.'))
       setPageError(null)
@@ -334,7 +338,7 @@ function App() {
     }
 
     return false
-  }, [updateSession])
+  }, [isSessionCurrent, updateSession])
 
   const navigateTo = (nextView: View) => {
     if (window.location.hash !== `#${nextView}`) {
@@ -347,21 +351,28 @@ function App() {
   }
 
   const refreshEmployees = useCallback(async (currentSession: AuthSession) => {
+    const token = currentSession.token
+
     try {
-      const response = await getEmployees(currentSession.token)
+      const response = await getEmployees(token)
+      if (!isSessionCurrent(token)) {
+        return
+      }
+
       setEmployees(response.items)
       setEmployeesError(null)
     } catch (error) {
-      if (handleUnauthorized(error)) {
+      if (handleUnauthorized(error, token) || !isSessionCurrent(token)) {
         return
       }
 
       setEmployees([])
       setEmployeesError(getErrorMessage(error, 'Не удалось загрузить сотрудников'))
     }
-  }, [handleUnauthorized])
+  }, [handleUnauthorized, isSessionCurrent])
 
   const refreshDashboard = useCallback(async (currentSession: AuthSession, preserveIdeaId?: string | null) => {
+    const token = currentSession.token
     setPageLoading(true)
     setPageError(null)
 
@@ -369,20 +380,24 @@ function App() {
       const role = currentSession.user.role
       const [context, activeResponse, archiveResponse, mineResponse, pendingResponse, directorResponse, aiResponse] =
         await Promise.all([
-          getAuthMe(currentSession.token),
-          getIdeas(currentSession.token, { scope: 'active', sort: 'recent', limit: 12 }),
-          getIdeas(currentSession.token, { scope: 'archive', sort: 'recent', limit: 12 }),
+          getAuthMe(token),
+          getIdeas(token, { scope: 'active', sort: 'recent', limit: 12 }),
+          getIdeas(token, { scope: 'archive', sort: 'recent', limit: 12 }),
           role === 'employee' || role === 'admin'
-            ? getIdeas(currentSession.token, { scope: 'mine', sort: 'recent', limit: 8 })
+            ? getIdeas(token, { scope: 'mine', sort: 'recent', limit: 8 })
             : Promise.resolve({ items: [] }),
           role === 'director' || role === 'admin'
-            ? getIdeas(currentSession.token, { status: 'pending_moderation', sort: 'recent', limit: 8 })
+            ? getIdeas(token, { status: 'pending_moderation', sort: 'recent', limit: 8 })
             : Promise.resolve({ items: [] }),
           role === 'director'
-            ? getIdeas(currentSession.token, { scope: 'director_review', sort: 'recent', limit: 8 })
+            ? getIdeas(token, { scope: 'director_review', sort: 'recent', limit: 8 })
             : Promise.resolve({ items: [] }),
-          getIdeas(currentSession.token, { scope: 'ai', sort: 'support', limit: 8 }),
+          getIdeas(token, { scope: 'ai', sort: 'support', limit: 8 }),
         ])
+
+      if (!isSessionCurrent(token)) {
+        return
+      }
 
       const nextSession: AuthSession = {
         ...currentSession,
@@ -411,15 +426,17 @@ function App() {
       setSelectedIdeaId(preferredIdea?.id ?? null)
       setSelectedIdea(preferredIdea)
     } catch (error) {
-      if (handleUnauthorized(error)) {
+      if (handleUnauthorized(error, token) || !isSessionCurrent(token)) {
         return
       }
 
       setPageError(getErrorMessage(error, 'Не удалось загрузить данные компании'))
     } finally {
-      setPageLoading(false)
+      if (isSessionCurrent(token) || activeSessionTokenRef.current === null) {
+        setPageLoading(false)
+      }
     }
-  }, [employees.length, handleUnauthorized, refreshEmployees, updateSession])
+  }, [employees.length, handleUnauthorized, isSessionCurrent, refreshEmployees, updateSession])
 
   useEffect(() => {
     if (!session) {
@@ -444,6 +461,7 @@ function App() {
       return
     }
 
+    const token = session.token
     setSelectedIdeaId(ideaId)
     if (fallback) {
       setSelectedIdea(fallback)
@@ -453,10 +471,14 @@ function App() {
     setDetailError(null)
 
     try {
-      const idea = await getIdea(session.token, ideaId)
+      const idea = await getIdea(token, ideaId)
+      if (!isSessionCurrent(token)) {
+        return
+      }
+
       setSelectedIdea(idea)
     } catch (error) {
-      if (handleUnauthorized(error)) {
+      if (handleUnauthorized(error, token) || !isSessionCurrent(token)) {
         return
       }
 
@@ -465,7 +487,9 @@ function App() {
         setSelectedIdea(fallback)
       }
     } finally {
-      setDetailLoading(false)
+      if (isSessionCurrent(token)) {
+        setDetailLoading(false)
+      }
     }
   }
 
@@ -531,11 +555,16 @@ function App() {
     }
 
     void (async () => {
+      const token = session.token
       setSubmitting(true)
       setModalError(null)
 
       try {
-        const idea = await createIdea(session.token, ideaForm)
+        const idea = await createIdea(token, ideaForm)
+        if (!isSessionCurrent(token)) {
+          return
+        }
+
         setIdeaForm(defaultIdeaForm)
         resetModalState()
         setNotice(makeNotice('success', 'Обращение отправлено на модерацию'))
@@ -544,13 +573,15 @@ function App() {
         navigateTo('appeals')
         await refreshDashboard(session, idea.id)
       } catch (error) {
-        if (handleUnauthorized(error)) {
+        if (handleUnauthorized(error, token) || !isSessionCurrent(token)) {
           return
         }
 
         setModalError(getErrorMessage(error, 'Не удалось создать обращение'))
       } finally {
-        setSubmitting(false)
+        if (isSessionCurrent(token)) {
+          setSubmitting(false)
+        }
       }
     })()
   }
@@ -561,24 +592,31 @@ function App() {
     }
 
     void (async () => {
+      const token = session.token
       setSubmitting(true)
       setModalError(null)
 
       try {
-        await createEmployee(session.token, employeeForm)
+        await createEmployee(token, employeeForm)
+        if (!isSessionCurrent(token)) {
+          return
+        }
+
         setEmployeeForm(defaultEmployeeForm)
         resetModalState()
         setNotice(makeNotice('success', 'Сотрудник добавлен в компанию'))
         navigateTo('employees')
         await refreshDashboard(session, selectedIdeaId)
       } catch (error) {
-        if (handleUnauthorized(error)) {
+        if (handleUnauthorized(error, token) || !isSessionCurrent(token)) {
           return
         }
 
         setModalError(getErrorMessage(error, 'Не удалось добавить сотрудника'))
       } finally {
-        setSubmitting(false)
+        if (isSessionCurrent(token)) {
+          setSubmitting(false)
+        }
       }
     })()
   }
@@ -588,24 +626,31 @@ function App() {
       return
     }
 
+    const token = session.token
     setSubmitting(true)
     setModalError(null)
 
     try {
-      const idea = await voteIdea(session.token, modal.ideaId, { value })
+      const idea = await voteIdea(token, modal.ideaId, { value })
+      if (!isSessionCurrent(token)) {
+        return
+      }
+
       resetModalState()
       setNotice(makeNotice('success', value === 'for' ? 'Голос "за" принят' : 'Голос "против" принят'))
       setSelectedIdea(idea)
       setSelectedIdeaId(idea.id)
       await refreshDashboard(session, idea.id)
     } catch (error) {
-      if (handleUnauthorized(error)) {
+      if (handleUnauthorized(error, token) || !isSessionCurrent(token)) {
         return
       }
 
       setModalError(getErrorMessage(error, 'Не удалось отправить голос'))
     } finally {
-      setSubmitting(false)
+      if (isSessionCurrent(token)) {
+        setSubmitting(false)
+      }
     }
   }
 
@@ -615,14 +660,19 @@ function App() {
     }
 
     void (async () => {
+      const token = session.token
       setSubmitting(true)
       setModalError(null)
 
       try {
-        const idea = await moderateIdea(session.token, modal.ideaId, {
+        const idea = await moderateIdea(token, modal.ideaId, {
           approved: modal.approved,
           comment: actionComment,
         })
+        if (!isSessionCurrent(token)) {
+          return
+        }
+
         resetModalState()
         setNotice(
           makeNotice(
@@ -634,13 +684,15 @@ function App() {
         setSelectedIdeaId(idea.id)
         await refreshDashboard(session, idea.id)
       } catch (error) {
-        if (handleUnauthorized(error)) {
+        if (handleUnauthorized(error, token) || !isSessionCurrent(token)) {
           return
         }
 
         setModalError(getErrorMessage(error, 'Не удалось завершить модерацию'))
       } finally {
-        setSubmitting(false)
+        if (isSessionCurrent(token)) {
+          setSubmitting(false)
+        }
       }
     })()
   }
@@ -651,14 +703,19 @@ function App() {
     }
 
     void (async () => {
+      const token = session.token
       setSubmitting(true)
       setModalError(null)
 
       try {
-        const idea = await decideIdea(session.token, modal.ideaId, {
+        const idea = await decideIdea(token, modal.ideaId, {
           approved: modal.approved,
           comment: actionComment,
         })
+        if (!isSessionCurrent(token)) {
+          return
+        }
+
         resetModalState()
         setNotice(
           makeNotice(
@@ -670,29 +727,35 @@ function App() {
         setSelectedIdeaId(idea.id)
         await refreshDashboard(session, idea.id)
       } catch (error) {
-        if (handleUnauthorized(error)) {
+        if (handleUnauthorized(error, token) || !isSessionCurrent(token)) {
           return
         }
 
         setModalError(getErrorMessage(error, 'Не удалось сохранить решение директора'))
       } finally {
-        setSubmitting(false)
+        if (isSessionCurrent(token)) {
+          setSubmitting(false)
+        }
       }
     })()
   }
 
   const handleLogout = async () => {
-    if (session) {
-      try {
-        await logout(session.token)
-      } catch {
-        // The local session still needs to be removed even if the request failed.
-      }
-    }
+    const currentSession = session
 
     updateSession(null)
     navigateTo('appeals')
     setNotice(makeNotice('success', 'Вы вышли из системы'))
+
+    if (!currentSession) {
+      return
+    }
+
+    try {
+      await logout(currentSession.token)
+    } catch {
+      // The local session still needs to be removed even if the request failed.
+    }
   }
 
   const previewSelectedIdea =
