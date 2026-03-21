@@ -1,7 +1,3 @@
-node_modules
+# Backend local configuration and state
+.env
 data/app-data.json
-.DS_Store
-bin
-obj
-reports/
-README.md

@@ -1,12 +1,24 @@
+# Generated output
 output/
-sripts/
-scripts/
 tmp/
 reports/
 .playwright-cli/
+
+# Local one-off utilities
+scripts/generate_functional_test_scenarios_doc.py
+
+# Dependencies and build artifacts
+node_modules/
+bin/
+obj/
+dist/
+dist-ssr/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# OS metadata
 .DS_Store
-Backend/bin/
-Backend/obj/
-Backend/node_modules/
-Frotend/node_modules/
-Frotend/cooperate/dist/
