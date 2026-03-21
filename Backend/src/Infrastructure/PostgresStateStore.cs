@@ -97,17 +97,6 @@ public sealed class PostgresStateStore : IAppStateStore
         }, cancellationToken);
     }
 
-    public async Task SetStateAsync(AppState state, CancellationToken cancellationToken = default)
-    {
-        await EnsureAsync(cancellationToken);
-
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        await AcquireStateLockAsync(connection, transaction, cancellationToken);
-        await WriteStateAsync(connection, transaction, state, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-    }
-
     private async Task AcquireStateLockAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
