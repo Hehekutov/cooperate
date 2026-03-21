@@ -4,3 +4,9 @@ scripts/
 tmp/
 reports/
 .playwright-cli/
+.DS_Store
+Backend/bin/
+Backend/obj/
+Backend/node_modules/
+Frotend/node_modules/
+Frotend/cooperate/dist/
