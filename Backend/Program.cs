@@ -14,6 +14,9 @@ var appOptions = new AppOptions
         Environment.GetEnvironmentVariable("SUPABASE_DB_CONNECTION") ??
         Environment.GetEnvironmentVariable("SUPABASE_DATABASE_URL") ??
         Environment.GetEnvironmentVariable("DATABASE_URL"),
+    DataFilePath = ResolveDataFilePath(
+        builder.Environment.ContentRootPath,
+        Environment.GetEnvironmentVariable("DATA_FILE")),
     DatabaseSchema = Environment.GetEnvironmentVariable("DATABASE_SCHEMA") ?? "public",
     SessionTtlHours = ParseInt(Environment.GetEnvironmentVariable("SESSION_TTL_HOURS"), 24 * 7),
     IdeaMonthlyLimit = ParseInt(Environment.GetEnvironmentVariable("IDEA_MONTHLY_LIMIT"), 3),
@@ -22,22 +25,34 @@ var appOptions = new AppOptions
 
 builder.Services.AddSingleton(appOptions);
 
-if (!appOptions.UseDatabase)
+if (await TryHandleMaintenanceCommandAsync(args, appOptions))
 {
-    throw new InvalidOperationException(
-        "Database connection string is missing. Set SUPABASE_DB_CONNECTION or DATABASE_URL in the shell, " +
-        "or create Backend/.env from Backend/.env.example. In Supabase Dashboard, open Connect and copy the Postgres connection string.");
+    return;
 }
 
-builder.Services.AddSingleton(_ =>
+if (!appOptions.UseDatabase && !appOptions.UseFileStore)
 {
-    var connectionString = PostgresConnectionStringFactory.Normalize(appOptions.DatabaseConnectionString);
-    var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
-    return dataSourceBuilder.Build();
-});
-builder.Services.AddSingleton<IAppStateStore>(serviceProvider => new PostgresStateStore(
-    serviceProvider.GetRequiredService<NpgsqlDataSource>(),
-    appOptions.DatabaseSchema));
+    throw new InvalidOperationException(
+        "Storage is not configured. Set SUPABASE_DB_CONNECTION or DATABASE_URL for Postgres, " +
+        "or set DATA_FILE for a local file-backed test store.");
+}
+
+if (appOptions.UseFileStore)
+{
+    builder.Services.AddSingleton<IAppStateStore>(_ => new JsonFileStateStore(appOptions.DataFilePath!));
+}
+else if (appOptions.UseDatabase)
+{
+    builder.Services.AddSingleton(_ =>
+    {
+        var connectionString = PostgresConnectionStringFactory.Normalize(appOptions.DatabaseConnectionString);
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+        return dataSourceBuilder.Build();
+    });
+    builder.Services.AddSingleton<IAppStateStore>(serviceProvider => new PostgresStateStore(
+        serviceProvider.GetRequiredService<NpgsqlDataSource>(),
+        appOptions.DatabaseSchema));
+}
 
 builder.Services.AddSingleton<AppService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -68,7 +83,7 @@ await store.EnsureAsync();
 
 app.Logger.LogInformation(
     "Cooperate backend storage provider: {StorageProvider}",
-    "Supabase/Postgres");
+    appOptions.UseFileStore ? "Local JSON file" : "Supabase/Postgres");
 
 app.UseCors();
 app.Use(async (context, next) =>
@@ -132,6 +147,18 @@ static int ParseInt(string? rawValue, int defaultValue)
     return int.TryParse(rawValue, out var parsed) ? parsed : defaultValue;
 }
 
+static string? ResolveDataFilePath(string contentRootPath, string? rawValue)
+{
+    if (string.IsNullOrWhiteSpace(rawValue))
+    {
+        return null;
+    }
+
+    return Path.IsPathRooted(rawValue)
+        ? rawValue
+        : Path.GetFullPath(Path.Combine(contentRootPath, rawValue));
+}
+
 static void LoadLocalEnvironmentFiles(string contentRootPath)
 {
     foreach (var path in GetLocalEnvironmentFileCandidates(contentRootPath))
@@ -190,4 +217,31 @@ static string NormalizeEnvValue(string rawValue)
         .Replace("\\n", "\n")
         .Replace("\\r", "\r")
         .Replace("\\t", "\t");
+}
+
+static async Task<bool> TryHandleMaintenanceCommandAsync(string[] args, AppOptions appOptions)
+{
+    if (args.Length == 0)
+    {
+        return false;
+    }
+
+    if (string.Equals(args[0], "drop-schema", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!appOptions.UseDatabase)
+        {
+            throw new InvalidOperationException("Database connection string is required for drop-schema.");
+        }
+
+        if (args.Length < 2 || string.IsNullOrWhiteSpace(args[1]))
+        {
+            throw new InvalidOperationException("Usage: dotnet run --project Backend/Backend.csproj -- drop-schema <schema_name>");
+        }
+
+        var connectionString = PostgresConnectionStringFactory.Normalize(appOptions.DatabaseConnectionString);
+        await SchemaMaintenance.DropSchemaAsync(connectionString, args[1]);
+        return true;
+    }
+
+    return false;
 }
