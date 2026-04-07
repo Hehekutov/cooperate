@@ -211,14 +211,36 @@ const buildUrl = (path: string, params?: Record<string, string | number | undefi
   return `${url.pathname}${url.search}`
 }
 
-const parseResponseBody = async <T>(response: Response): Promise<T | null> => {
+type ParsedResponse<T> = {
+  data: T | null
+  rawText: string
+}
+
+const parseResponseBody = async <T>(response: Response): Promise<ParsedResponse<T>> => {
   const text = await response.text()
 
   if (!text) {
-    return null
+    return { data: null, rawText: '' }
   }
 
-  return JSON.parse(text) as T
+  const contentType = response.headers.get('content-type') ?? ''
+  const looksLikeJson = contentType.includes('application/json') || contentType.includes('+json')
+
+  if (looksLikeJson) {
+    return {
+      data: JSON.parse(text) as T,
+      rawText: text,
+    }
+  }
+
+  try {
+    return {
+      data: JSON.parse(text) as T,
+      rawText: text,
+    }
+  } catch {
+    return { data: null, rawText: text }
+  }
 }
 
 async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
@@ -242,18 +264,36 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
   }
 
   const payload = await parseResponseBody<{ data?: T } & ApiErrorEnvelope>(response)
+  const responseData = payload.data
 
   if (!response.ok) {
-    const error = payload?.error
+    const error = responseData?.error
+    const responseSnippet = payload.rawText.trim().slice(0, 200)
+    const nonJsonHint =
+      responseSnippet.startsWith('<') || responseSnippet.startsWith('The page')
+        ? 'The API responded with HTML instead of JSON. Check that VITE_API_BASE_URL points to the backend in Vercel.'
+        : null
     throw new ApiClientError(
-      error?.message ?? 'Request failed',
+      error?.message ?? nonJsonHint ?? 'Request failed',
       response.status,
       error?.code ?? 'REQUEST_FAILED',
-      error?.details ?? null,
+      error?.details ?? (responseSnippet || null),
     )
   }
 
-  return (payload?.data ?? payload) as T
+  if (responseData === null) {
+    const responseSnippet = payload.rawText.trim().slice(0, 200)
+    throw new ApiClientError(
+      responseSnippet.startsWith('<') || responseSnippet.startsWith('The page')
+        ? 'The API responded with HTML instead of JSON. Check that VITE_API_BASE_URL points to the backend in Vercel.'
+        : 'The API returned an empty or invalid response',
+      response.status,
+      'INVALID_RESPONSE',
+      responseSnippet || null,
+    )
+  }
+
+  return (responseData.data ?? responseData) as T
 }
 
 export const getErrorMessage = (error: unknown, fallback = 'Не удалось выполнить запрос') => {
