@@ -6,7 +6,7 @@ OUTPUT_DIR="${ROOT_DIR}/output/test-reports"
 BACKEND_PORT="${BACKEND_PORT:-3101}"
 FRONTEND_PORT="${FRONTEND_PORT:-4173}"
 TEST_RUN_ID="${TEST_RUN_ID:-$(date +%s)}"
-BACKEND_STORAGE_MODE="${BACKEND_STORAGE_MODE:-file}"
+BACKEND_STORAGE_MODE="${BACKEND_STORAGE_MODE:-db}"
 DATABASE_SCHEMA="${DATABASE_SCHEMA:-cooperate_test_${TEST_RUN_ID}}"
 DATA_FILE="${DATA_FILE:-/tmp/cooperate-test-${TEST_RUN_ID}.json}"
 BACKEND_LOG="${OUTPUT_DIR}/backend.log"
@@ -19,6 +19,17 @@ mkdir -p "${OUTPUT_DIR}"
 
 BACKEND_PID=""
 FRONTEND_PID=""
+
+assert_port_is_free() {
+  local port="$1"
+  local label="$2"
+
+  if lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "${label} port ${port} is already in use" >&2
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN >&2 || true
+    exit 1
+  fi
+}
 
 cleanup() {
   local exit_code="$?"
@@ -58,6 +69,9 @@ npm --prefix "${ROOT_DIR}/Frotend" run typecheck
 echo "==> Browser runtime"
 npm --prefix "${ROOT_DIR}/Frotend/cooperate" run e2e:install-browser
 
+assert_port_is_free "${BACKEND_PORT}" "Backend"
+assert_port_is_free "${FRONTEND_PORT}" "Frontend"
+
 if [[ "${BACKEND_STORAGE_MODE}" == "file" ]]; then
   echo "==> Start backend (file store: ${DATA_FILE})"
 else
@@ -89,16 +103,16 @@ node "${ROOT_DIR}/Backend/scripts/api-test.mjs"
 
 echo "==> Start frontend"
 (
-  cd "${ROOT_DIR}/Frotend"
+  cd "${ROOT_DIR}/Frotend/cooperate"
   VITE_API_BASE_URL="http://127.0.0.1:${BACKEND_PORT}" \
-  npm run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}"
+  npm run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" --strictPort
 ) >"${FRONTEND_LOG}" 2>&1 &
 FRONTEND_PID="$!"
 
 node "${ROOT_DIR}/scripts/wait-for-health.mjs" --url "http://127.0.0.1:${FRONTEND_PORT}/"
 
 echo "==> Frontend E2E"
-npm --prefix "${ROOT_DIR}/Frotend/cooperate" run e2e -- \
+node "${ROOT_DIR}/Frotend/cooperate/scripts/e2e.mjs" \
   --base-url "http://127.0.0.1:${FRONTEND_PORT}" \
   --report "${E2E_REPORT}"
 
