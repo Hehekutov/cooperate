@@ -71,11 +71,22 @@ async function request(path, { method = 'GET', token, body, expectedStatus = 200
     headers.Authorization = `Bearer ${token}`
   }
 
-  const response = await fetch(`${baseUrl}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  let response
+
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch (error) {
+    const reason =
+      error instanceof Error
+        ? `${error.message}${error.cause ? ` | cause: ${String(error.cause)}` : ''}`
+        : String(error)
+
+    throw new Error(`${method} ${path} failed before response: ${reason}`)
+  }
 
   const text = await response.text()
   const payload = text ? JSON.parse(text) : null
@@ -100,11 +111,22 @@ async function expectFailure(path, { method = 'GET', token, body, expectedStatus
     headers.Authorization = `Bearer ${token}`
   }
 
-  const response = await fetch(`${baseUrl}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  let response
+
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch (error) {
+    const reason =
+      error instanceof Error
+        ? `${error.message}${error.cause ? ` | cause: ${String(error.cause)}` : ''}`
+        : String(error)
+
+    throw new Error(`${method} ${path} failed before response: ${reason}`)
+  }
 
   const text = await response.text()
   const payload = text ? JSON.parse(text) : null
@@ -381,9 +403,15 @@ async function main() {
     expectedStatus: 200,
     body: { value: 'against' },
   })
-  const rejectedByVote = await request(`/api/ideas/${voteRejectedIdea.id}/vote`, {
+  await request(`/api/ideas/${voteRejectedIdea.id}/vote`, {
     method: 'POST',
     token: employee2Session.token,
+    expectedStatus: 200,
+    body: { value: 'against' },
+  })
+  const rejectedByVote = await request(`/api/ideas/${voteRejectedIdea.id}/vote`, {
+    method: 'POST',
+    token: lateEmployeeSession.token,
     expectedStatus: 200,
     body: { value: 'against' },
   })
@@ -454,6 +482,13 @@ async function main() {
     expectedStatus: 200,
     body: { value: 'for' },
   })
+  const waitingReviewIdea = await request(`/api/ideas/${waitingForDirectorIdea.id}/vote`, {
+    method: 'POST',
+    token: employee2Session.token,
+    expectedStatus: 200,
+    body: { value: 'for' },
+  })
+  assert(waitingReviewIdea.status === 'director_review', 'Waiting idea should reach director review')
   report.push('director review queue ok')
 
   await createIdea(

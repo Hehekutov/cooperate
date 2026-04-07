@@ -93,6 +93,7 @@ const recordStep = async (name, fn) => {
 
 const browser = await chromium.launch({ headless: true })
 const page = await browser.newPage({ viewport: { width: 1440, height: 1080 } })
+const main = page.getByRole('main')
 
 const closeModal = async () => {
   await page.keyboard.press('Escape').catch(() => {})
@@ -120,22 +121,25 @@ try {
     await page.getByLabel('Должность').fill(company.directorPosition)
     await page.getByLabel('Телефон').fill(company.phone)
     await page.getByLabel('Пароль').fill(company.password)
-    await page.getByRole('button', { name: 'Создать компанию' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Создать компанию' }).click()
     await page.getByText('Компания зарегистрирована, можно добавлять сотрудников').waitFor()
     await page.getByText(`${company.directorName} · Директор`).waitFor()
   })
 
   await recordStep('director adds employees', async () => {
     for (const user of Object.values(users)) {
-      await page.getByRole('button', { name: 'Добавить сотрудника' }).click()
+      await main.getByRole('button', { name: 'Добавить сотрудника' }).click()
       await page.getByLabel('ФИО').fill(user.fullName)
       await page.getByLabel('Логин').fill(user.login)
       await page.getByLabel('Телефон').fill(user.phone)
       await page.getByLabel('Должность').fill(user.position)
-      await page.getByLabel('Роль').selectOption(user.roleLabel === 'Администратор' ? 'admin' : 'employee')
+      await page.getByRole('dialog').getByRole('combobox').first().selectOption(
+        user.roleLabel === 'Администратор' ? 'admin' : 'employee',
+      )
       await page.getByLabel('Пароль').fill(user.password)
-      await page.getByRole('button', { name: 'Добавить сотрудника' }).last().click()
+      await page.getByRole('dialog').getByRole('button', { name: 'Добавить сотрудника' }).click()
       await page.getByText('Сотрудник добавлен в компанию').waitFor()
+      await page.getByRole('dialog').waitFor({ state: 'hidden' })
     }
 
     await page.getByRole('button', { name: 'Сотрудники' }).click()
@@ -147,21 +151,23 @@ try {
   await recordStep('logout and invalid login error', async () => {
     await page.getByRole('button', { name: 'Выйти' }).click()
     await page.getByRole('button', { name: 'Войти' }).click()
+    await page.getByRole('dialog').waitFor()
     await page.getByLabel('Логин').fill(company.directorLogin)
     await page.getByLabel('Пароль').fill('wrong-password')
-    await page.getByRole('button', { name: 'Войти' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Войти' }).click()
     await page.getByText('Invalid login or password').waitFor()
     await closeModal()
   })
 
   await recordStep('employee creates idea', async () => {
     await page.getByRole('button', { name: 'Войти' }).click()
+    await page.getByRole('dialog').waitFor()
     await page.getByLabel('Логин').fill(users.employeeOne.login)
     await page.getByLabel('Пароль').fill(users.employeeOne.password)
-    await page.getByRole('button', { name: 'Войти' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Войти' }).click()
     await page.getByText(`${users.employeeOne.fullName} · Сотрудник`).waitFor()
 
-    await page.getByRole('button', { name: 'Новое обращение' }).click()
+    await main.getByRole('button', { name: 'Новое обращение' }).click()
     await page.getByLabel('Заголовок').fill(ideaTitle)
     await page.getByLabel('Описание идеи').fill(ideaDescription)
     await page.getByLabel('Тип голосования').selectOption('standard')
@@ -173,14 +179,15 @@ try {
   await recordStep('admin moderates idea', async () => {
     await page.getByRole('button', { name: 'Выйти' }).click()
     await page.getByRole('button', { name: 'Войти' }).click()
+    await page.getByRole('dialog').waitFor()
     await page.getByLabel('Логин').fill(users.admin.login)
     await page.getByLabel('Пароль').fill(users.admin.password)
-    await page.getByRole('button', { name: 'Войти' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Войти' }).click()
     await page.getByText(`${users.admin.fullName} · Администратор`).waitFor()
     await page.getByText(ideaTitle).waitFor()
     await page.getByRole('button', { name: 'Опубликовать' }).click()
     await page.getByLabel('Комментарий').fill('Идея готова к общему голосованию.')
-    await page.getByRole('button', { name: 'Опубликовать' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Опубликовать' }).click()
     await page.getByText('Идея опубликована для голосования').waitFor()
     await page.getByText('AI-рекомендации').waitFor()
   })
@@ -188,18 +195,20 @@ try {
   await recordStep('employees vote through UI', async () => {
     await page.getByRole('button', { name: 'Выйти' }).click()
     await page.getByRole('button', { name: 'Войти' }).click()
+    await page.getByRole('dialog').waitFor()
     await page.getByLabel('Логин').fill(users.employeeOne.login)
     await page.getByLabel('Пароль').fill(users.employeeOne.password)
-    await page.getByRole('button', { name: 'Войти' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Войти' }).click()
     await page.getByRole('button', { name: 'Голосовать' }).click()
     await page.getByRole('button', { name: 'Голосую за' }).click()
     await page.getByText('Голос "за" принят').waitFor()
 
     await page.getByRole('button', { name: 'Выйти' }).click()
     await page.getByRole('button', { name: 'Войти' }).click()
+    await page.getByRole('dialog').waitFor()
     await page.getByLabel('Логин').fill(users.employeeTwo.login)
     await page.getByLabel('Пароль').fill(users.employeeTwo.password)
-    await page.getByRole('button', { name: 'Войти' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Войти' }).click()
     await page.getByRole('button', { name: 'Голосовать' }).click()
     await page.getByRole('button', { name: 'Голосую за' }).click()
     await page.getByText('Голос "за" принят').waitFor()
@@ -208,9 +217,10 @@ try {
   await recordStep('director final decision and archive verification', async () => {
     await page.getByRole('button', { name: 'Выйти' }).click()
     await page.getByRole('button', { name: 'Войти' }).click()
+    await page.getByRole('dialog').waitFor()
     await page.getByLabel('Логин').fill(company.directorLogin)
     await page.getByLabel('Пароль').fill(company.password)
-    await page.getByRole('button', { name: 'Войти' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Войти' }).click()
     await page.getByText(`${company.directorName} · Директор`).waitFor()
     await page.getByText('Ожидают решения директора').waitFor()
     await page.getByRole('button', { name: 'Опубликовать' }).click()

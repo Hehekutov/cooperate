@@ -128,84 +128,16 @@ public sealed class PostgresStateStore : IAppStateStore
         CancellationToken cancellationToken)
     {
         var state = AppState.CreateInitial();
-
-        await ReadCompaniesAsync(state, connection, transaction, cancellationToken);
-        await ReadUsersAsync(state, connection, transaction, cancellationToken);
-        await ReadIdeasAsync(state, connection, transaction, cancellationToken);
-        await ReadIdeaEligibilityAsync(state, connection, transaction, cancellationToken);
-        await ReadVotesAsync(state, connection, transaction, cancellationToken);
-        await ReadSessionsAsync(state, connection, transaction, cancellationToken);
-
-        return state;
-    }
-
-    private async Task ReadCompaniesAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
         await using var command = new NpgsqlCommand(
             $$"""
             select id, name, inn, description, created_at, idea_monthly_limit, vote_approval_percent
             from {{_companiesTable}}
             order by created_at, id;
-            """,
-            connection,
-            transaction);
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            state.Companies.Add(new Company
-            {
-                Id = reader.GetString(0),
-                Name = reader.GetString(1),
-                Inn = reader.GetString(2),
-                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
-                CreatedAt = reader.GetFieldValue<DateTimeOffset>(4).ToString("O"),
-                Settings = new CompanySettings
-                {
-                    IdeaMonthlyLimit = reader.GetInt32(5),
-                    VoteApprovalPercent = reader.GetInt32(6)
-                }
-            });
-        }
-    }
-
-    private async Task ReadUsersAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
-        await using var command = new NpgsqlCommand(
-            $$"""
             select id, company_id, full_name, login, phone, role, position, avatar_url, password_hash, is_active, created_at
             from {{_usersTable}}
             order by created_at, id;
-            """,
-            connection,
-            transaction);
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            state.Users.Add(new UserAccount
-            {
-                Id = reader.GetString(0),
-                CompanyId = reader.GetString(1),
-                FullName = reader.GetString(2),
-                Login = reader.GetString(3),
-                Phone = reader.GetString(4),
-                Role = reader.GetString(5),
-                Position = reader.GetString(6),
-                AvatarUrl = reader.IsDBNull(7) ? null : reader.GetString(7),
-                PasswordHash = reader.GetString(8),
-                IsActive = reader.GetBoolean(9),
-                CreatedAt = reader.GetFieldValue<DateTimeOffset>(10).ToString("O")
-            });
-        }
-    }
-
-    private async Task ReadIdeasAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
-        await using var command = new NpgsqlCommand(
-            $$"""
             select
                 id,
                 company_id,
@@ -228,12 +160,81 @@ public sealed class PostgresStateStore : IAppStateStore
                 updated_at
             from {{_ideasTable}}
             order by created_at, id;
+
+            select idea_id, user_id
+            from {{_ideaEligibilityTable}}
+            order by idea_id, user_id;
+
+            select id, idea_id, user_id, value, created_at
+            from {{_votesTable}}
+            order by created_at, id;
+
+            select id, user_id, token, created_at, expires_at
+            from {{_sessionsTable}}
+            order by created_at, id;
             """,
             connection,
             transaction);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await ReadCompaniesAsync(state, reader, cancellationToken);
+        await reader.NextResultAsync(cancellationToken);
+        await ReadUsersAsync(state, reader, cancellationToken);
+        await reader.NextResultAsync(cancellationToken);
+        await ReadIdeasAsync(state, reader, cancellationToken);
+        await reader.NextResultAsync(cancellationToken);
+        await ReadIdeaEligibilityAsync(state, reader, cancellationToken);
+        await reader.NextResultAsync(cancellationToken);
+        await ReadVotesAsync(state, reader, cancellationToken);
+        await reader.NextResultAsync(cancellationToken);
+        await ReadSessionsAsync(state, reader, cancellationToken);
 
+        return state;
+    }
+
+    private static async Task ReadCompaniesAsync(AppState state, NpgsqlDataReader reader, CancellationToken cancellationToken)
+    {
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            state.Companies.Add(new Company
+            {
+                Id = reader.GetString(0),
+                Name = reader.GetString(1),
+                Inn = reader.GetString(2),
+                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
+                CreatedAt = reader.GetFieldValue<DateTimeOffset>(4).ToString("O"),
+                Settings = new CompanySettings
+                {
+                    IdeaMonthlyLimit = reader.GetInt32(5),
+                    VoteApprovalPercent = reader.GetInt32(6)
+                }
+            });
+        }
+    }
+
+    private static async Task ReadUsersAsync(AppState state, NpgsqlDataReader reader, CancellationToken cancellationToken)
+    {
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            state.Users.Add(new UserAccount
+            {
+                Id = reader.GetString(0),
+                CompanyId = reader.GetString(1),
+                FullName = reader.GetString(2),
+                Login = reader.GetString(3),
+                Phone = reader.GetString(4),
+                Role = reader.GetString(5),
+                Position = reader.GetString(6),
+                AvatarUrl = reader.IsDBNull(7) ? null : reader.GetString(7),
+                PasswordHash = reader.GetString(8),
+                IsActive = reader.GetBoolean(9),
+                CreatedAt = reader.GetFieldValue<DateTimeOffset>(10).ToString("O")
+            });
+        }
+    }
+
+    private static async Task ReadIdeasAsync(AppState state, NpgsqlDataReader reader, CancellationToken cancellationToken)
+    {
         while (await reader.ReadAsync(cancellationToken))
         {
             state.Ideas.Add(new Idea
@@ -261,20 +262,9 @@ public sealed class PostgresStateStore : IAppStateStore
         }
     }
 
-    private async Task ReadIdeaEligibilityAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    private static async Task ReadIdeaEligibilityAsync(AppState state, NpgsqlDataReader reader, CancellationToken cancellationToken)
     {
         var ideasById = state.Ideas.ToDictionary(idea => idea.Id, StringComparer.Ordinal);
-
-        await using var command = new NpgsqlCommand(
-            $$"""
-            select idea_id, user_id
-            from {{_ideaEligibilityTable}}
-            order by idea_id, user_id;
-            """,
-            connection,
-            transaction);
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -287,19 +277,8 @@ public sealed class PostgresStateStore : IAppStateStore
         }
     }
 
-    private async Task ReadVotesAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    private static async Task ReadVotesAsync(AppState state, NpgsqlDataReader reader, CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(
-            $$"""
-            select id, idea_id, user_id, value, created_at
-            from {{_votesTable}}
-            order by created_at, id;
-            """,
-            connection,
-            transaction);
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
         while (await reader.ReadAsync(cancellationToken))
         {
             state.Votes.Add(new IdeaVote
@@ -313,19 +292,8 @@ public sealed class PostgresStateStore : IAppStateStore
         }
     }
 
-    private async Task ReadSessionsAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    private static async Task ReadSessionsAsync(AppState state, NpgsqlDataReader reader, CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(
-            $$"""
-            select id, user_id, token, created_at, expires_at
-            from {{_sessionsTable}}
-            order by created_at, id;
-            """,
-            connection,
-            transaction);
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
         while (await reader.ReadAsync(cancellationToken))
         {
             state.Sessions.Add(new Session
@@ -345,46 +313,32 @@ public sealed class PostgresStateStore : IAppStateStore
         AppState state,
         CancellationToken cancellationToken)
     {
-        await DeleteExistingDataAsync(connection, transaction, cancellationToken);
-        await InsertCompaniesAsync(state, connection, transaction, cancellationToken);
-        await InsertUsersAsync(state, connection, transaction, cancellationToken);
-        await InsertIdeasAsync(state, connection, transaction, cancellationToken);
-        await InsertIdeaEligibilityAsync(state, connection, transaction, cancellationToken);
-        await InsertVotesAsync(state, connection, transaction, cancellationToken);
-        await InsertSessionsAsync(state, connection, transaction, cancellationToken);
+        await SyncSessionsAsync(connection, transaction, state.Sessions, cancellationToken);
+        await SyncIdeaEligibilityAsync(connection, transaction, state.Ideas, cancellationToken);
+        await UpsertStateAsync(state, connection, transaction, cancellationToken);
     }
 
-    private async Task DeleteExistingDataAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    private async Task UpsertStateAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(
-            $$"""
-            delete from {{_ideaEligibilityTable}};
-            delete from {{_votesTable}};
-            delete from {{_sessionsTable}};
-            delete from {{_ideasTable}};
-            delete from {{_usersTable}};
-            delete from {{_companiesTable}};
-            """,
-            connection,
-            transaction);
+        await using var batch = new NpgsqlBatch(connection, transaction);
 
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private async Task InsertCompaniesAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
         foreach (var company in state.Companies)
         {
-            await using var command = new NpgsqlCommand(
+            var command = new NpgsqlBatchCommand(
                 $$"""
                 insert into {{_companiesTable}} (
                     id, name, inn, description, created_at, idea_monthly_limit, vote_approval_percent
                 ) values (
                     @id, @name, @inn, @description, @created_at, @idea_monthly_limit, @vote_approval_percent
-                );
-                """,
-                connection,
-                transaction);
+                )
+                on conflict (id) do update set
+                    name = excluded.name,
+                    inn = excluded.inn,
+                    description = excluded.description,
+                    created_at = excluded.created_at,
+                    idea_monthly_limit = excluded.idea_monthly_limit,
+                    vote_approval_percent = excluded.vote_approval_percent
+                """);
 
             command.Parameters.AddWithValue("id", company.Id);
             command.Parameters.AddWithValue("name", company.Name);
@@ -393,24 +347,30 @@ public sealed class PostgresStateStore : IAppStateStore
             command.Parameters.AddWithValue("created_at", ParseTimestamp(company.CreatedAt));
             command.Parameters.AddWithValue("idea_monthly_limit", company.Settings.IdeaMonthlyLimit);
             command.Parameters.AddWithValue("vote_approval_percent", company.Settings.VoteApprovalPercent);
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            batch.BatchCommands.Add(command);
         }
-    }
 
-    private async Task InsertUsersAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
         foreach (var user in state.Users)
         {
-            await using var command = new NpgsqlCommand(
+            var command = new NpgsqlBatchCommand(
                 $$"""
                 insert into {{_usersTable}} (
                     id, company_id, full_name, login, phone, role, position, avatar_url, password_hash, is_active, created_at
                 ) values (
                     @id, @company_id, @full_name, @login, @phone, @role, @position, @avatar_url, @password_hash, @is_active, @created_at
-                );
-                """,
-                connection,
-                transaction);
+                )
+                on conflict (id) do update set
+                    company_id = excluded.company_id,
+                    full_name = excluded.full_name,
+                    login = excluded.login,
+                    phone = excluded.phone,
+                    role = excluded.role,
+                    position = excluded.position,
+                    avatar_url = excluded.avatar_url,
+                    password_hash = excluded.password_hash,
+                    is_active = excluded.is_active,
+                    created_at = excluded.created_at
+                """);
 
             command.Parameters.AddWithValue("id", user.Id);
             command.Parameters.AddWithValue("company_id", user.CompanyId);
@@ -423,15 +383,12 @@ public sealed class PostgresStateStore : IAppStateStore
             command.Parameters.AddWithValue("password_hash", user.PasswordHash);
             command.Parameters.AddWithValue("is_active", user.IsActive);
             command.Parameters.AddWithValue("created_at", ParseTimestamp(user.CreatedAt));
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            batch.BatchCommands.Add(command);
         }
-    }
 
-    private async Task InsertIdeasAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
         foreach (var idea in state.Ideas)
         {
-            await using var command = new NpgsqlCommand(
+            var command = new NpgsqlBatchCommand(
                 $$"""
                 insert into {{_ideasTable}} (
                     id,
@@ -473,10 +430,27 @@ public sealed class PostgresStateStore : IAppStateStore
                     @archived_at,
                     @created_at,
                     @updated_at
-                );
-                """,
-                connection,
-                transaction);
+                )
+                on conflict (id) do update set
+                    company_id = excluded.company_id,
+                    author_id = excluded.author_id,
+                    voting_type = excluded.voting_type,
+                    title = excluded.title,
+                    description = excluded.description,
+                    status = excluded.status,
+                    moderation_comment = excluded.moderation_comment,
+                    moderated_at = excluded.moderated_at,
+                    moderated_by = excluded.moderated_by,
+                    voting_opened_at = excluded.voting_opened_at,
+                    voting_closed_at = excluded.voting_closed_at,
+                    director_review_requested_at = excluded.director_review_requested_at,
+                    director_decision_at = excluded.director_decision_at,
+                    director_decision_by = excluded.director_decision_by,
+                    director_comment = excluded.director_comment,
+                    archived_at = excluded.archived_at,
+                    created_at = excluded.created_at,
+                    updated_at = excluded.updated_at
+                """);
 
             command.Parameters.AddWithValue("id", idea.Id);
             command.Parameters.AddWithValue("company_id", idea.CompanyId);
@@ -497,71 +471,116 @@ public sealed class PostgresStateStore : IAppStateStore
             command.Parameters.AddWithValue("archived_at", DbTimestamp(idea.ArchivedAt));
             command.Parameters.AddWithValue("created_at", ParseTimestamp(idea.CreatedAt));
             command.Parameters.AddWithValue("updated_at", ParseTimestamp(idea.UpdatedAt));
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            batch.BatchCommands.Add(command);
         }
-    }
 
-    private async Task InsertIdeaEligibilityAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
         foreach (var idea in state.Ideas)
         {
             foreach (var userId in idea.VotingEligibleUserIds)
             {
-                await using var command = new NpgsqlCommand(
+                var command = new NpgsqlBatchCommand(
                     $$"""
                     insert into {{_ideaEligibilityTable}} (idea_id, user_id)
-                    values (@idea_id, @user_id);
-                    """,
-                    connection,
-                    transaction);
+                    values (@idea_id, @user_id)
+                    on conflict (idea_id, user_id) do nothing
+                    """);
 
                 command.Parameters.AddWithValue("idea_id", idea.Id);
                 command.Parameters.AddWithValue("user_id", userId);
-                await command.ExecuteNonQueryAsync(cancellationToken);
+                batch.BatchCommands.Add(command);
             }
         }
-    }
 
-    private async Task InsertVotesAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
         foreach (var vote in state.Votes)
         {
-            await using var command = new NpgsqlCommand(
+            var command = new NpgsqlBatchCommand(
                 $$"""
                 insert into {{_votesTable}} (id, idea_id, user_id, value, created_at)
-                values (@id, @idea_id, @user_id, @value, @created_at);
-                """,
-                connection,
-                transaction);
+                values (@id, @idea_id, @user_id, @value, @created_at)
+                on conflict (id) do update set
+                    idea_id = excluded.idea_id,
+                    user_id = excluded.user_id,
+                    value = excluded.value,
+                    created_at = excluded.created_at
+                """);
 
             command.Parameters.AddWithValue("id", vote.Id);
             command.Parameters.AddWithValue("idea_id", vote.IdeaId);
             command.Parameters.AddWithValue("user_id", vote.UserId);
             command.Parameters.AddWithValue("value", vote.Value);
             command.Parameters.AddWithValue("created_at", ParseTimestamp(vote.CreatedAt));
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            batch.BatchCommands.Add(command);
         }
-    }
 
-    private async Task InsertSessionsAsync(AppState state, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
         foreach (var session in state.Sessions)
         {
-            await using var command = new NpgsqlCommand(
+            var command = new NpgsqlBatchCommand(
                 $$"""
                 insert into {{_sessionsTable}} (id, user_id, token, created_at, expires_at)
-                values (@id, @user_id, @token, @created_at, @expires_at);
-                """,
-                connection,
-                transaction);
+                values (@id, @user_id, @token, @created_at, @expires_at)
+                on conflict (id) do update set
+                    user_id = excluded.user_id,
+                    token = excluded.token,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at
+                """);
 
             command.Parameters.AddWithValue("id", session.Id);
             command.Parameters.AddWithValue("user_id", session.UserId);
             command.Parameters.AddWithValue("token", session.Token);
             command.Parameters.AddWithValue("created_at", ParseTimestamp(session.CreatedAt));
             command.Parameters.AddWithValue("expires_at", ParseTimestamp(session.ExpiresAt));
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            batch.BatchCommands.Add(command);
         }
+
+        if (batch.BatchCommands.Count > 0)
+        {
+            await batch.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    private async Task SyncIdeaEligibilityAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IReadOnlyList<Idea> ideas,
+        CancellationToken cancellationToken)
+    {
+        if (ideas.Count == 0)
+        {
+            return;
+        }
+
+        await using var command = new NpgsqlCommand(
+            $$"""
+            delete from {{_ideaEligibilityTable}}
+            where idea_id = any(@idea_ids);
+            """,
+            connection,
+            transaction);
+
+        command.Parameters.AddWithValue("idea_ids", ideas.Select(idea => idea.Id).ToArray());
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private async Task SyncSessionsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IReadOnlyList<Session> sessions,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            sessions.Count == 0
+                ? $$"""delete from {{_sessionsTable}};"""
+                : $$"""delete from {{_sessionsTable}} where not (id = any(@session_ids));""",
+            connection,
+            transaction);
+
+        if (sessions.Count > 0)
+        {
+            command.Parameters.AddWithValue("session_ids", sessions.Select(session => session.Id).ToArray());
+        }
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private string BuildEnsureStorageSql()
