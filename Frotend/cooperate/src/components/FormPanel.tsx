@@ -35,7 +35,7 @@ export const FormPanel: FC<FormPanelProps> = ({
     <section className="form-panel" style={fullWidth ? { maxWidth: '100%' } : undefined}>
       <h3>{title}</h3>
       {description && <p>{description}</p>}
-      <form onSubmit={handleSubmit}>
+      <form noValidate onSubmit={handleSubmit}>
         {children}
         <div className="form-actions">
           <button className="cta-btn" type="submit" disabled={submitDisabled}>

@@ -171,6 +171,128 @@ const defaultEmployeeForm: CreateEmployeePayload = {
   position: '',
 }
 
+type LoginFormErrors = Partial<Record<keyof typeof defaultLoginForm, string>>
+type RegisterFormErrors = Partial<Record<keyof typeof defaultRegisterForm, string>>
+type IdeaFormErrors = Partial<Record<keyof typeof defaultIdeaForm, string>>
+type EmployeeFormErrors = Partial<Record<keyof typeof defaultEmployeeForm, string>>
+
+const LOGIN_REGEX = /^[a-zA-Z0-9._-]{3,32}$/
+const COMPANY_INN_REGEX = /^\d{10}(\d{2})?$/
+const PHONE_REGEX = /^\+?[0-9\s()-]{10,20}$/
+
+const getDigits = (value: string) => value.replace(/\D/g, '')
+const hasText = (value: string, minLength = 1) => value.trim().length >= minLength
+
+const validateLoginValue = (value: string) => LOGIN_REGEX.test(value.trim())
+const validateInnValue = (value: string) => COMPANY_INN_REGEX.test(getDigits(value))
+const validatePhoneValue = (value: string) => PHONE_REGEX.test(value.trim()) && getDigits(value).length >= 10
+
+const validateLoginForm = (form: typeof defaultLoginForm): LoginFormErrors => {
+  const errors: LoginFormErrors = {}
+
+  if (!hasText(form.login)) {
+    errors.login = 'Введите логин.'
+  } else if (!validateLoginValue(form.login)) {
+    errors.login = 'Логин должен быть 3-32 символа без пробелов.'
+  }
+
+  if (!hasText(form.password)) {
+    errors.password = 'Введите пароль.'
+  } else if (form.password.trim().length < 8) {
+    errors.password = 'Пароль должен быть не короче 8 символов.'
+  }
+
+  return errors
+}
+
+const validateRegisterForm = (form: typeof defaultRegisterForm): RegisterFormErrors => {
+  const errors: RegisterFormErrors = {}
+
+  if (!hasText(form.companyName, 2)) {
+    errors.companyName = 'Укажите название компании.'
+  }
+
+  if (!hasText(form.companyInn)) {
+    errors.companyInn = 'Укажите ИНН компании.'
+  } else if (!validateInnValue(form.companyInn)) {
+    errors.companyInn = 'ИНН должен содержать 10 или 12 цифр.'
+  }
+
+  if (!hasText(form.directorLogin)) {
+    errors.directorLogin = 'Укажите логин директора.'
+  } else if (!validateLoginValue(form.directorLogin)) {
+    errors.directorLogin = 'Логин должен быть 3-32 символа без пробелов.'
+  }
+
+  if (!hasText(form.directorName, 2)) {
+    errors.directorName = 'Укажите ФИО директора.'
+  }
+
+  if (!hasText(form.directorPosition, 2)) {
+    errors.directorPosition = 'Укажите должность директора.'
+  }
+
+  if (!hasText(form.phone)) {
+    errors.phone = 'Укажите номер телефона.'
+  } else if (!validatePhoneValue(form.phone)) {
+    errors.phone = 'Введите номер в понятном формате, например +7 (900) 000-00-11.'
+  }
+
+  if (!hasText(form.password)) {
+    errors.password = 'Создайте пароль.'
+  } else if (form.password.trim().length < 8) {
+    errors.password = 'Пароль должен быть не короче 8 символов.'
+  }
+
+  return errors
+}
+
+const validateIdeaForm = (form: CreateIdeaPayload): IdeaFormErrors => {
+  const errors: IdeaFormErrors = {}
+
+  if (!hasText(form.title, 5)) {
+    errors.title = 'Заголовок должен быть не короче 5 символов.'
+  }
+
+  if (!hasText(form.description, 10)) {
+    errors.description = 'Опишите идею хотя бы в нескольких словах.'
+  }
+
+  return errors
+}
+
+const validateEmployeeForm = (form: typeof defaultEmployeeForm): EmployeeFormErrors => {
+  const errors: EmployeeFormErrors = {}
+
+  if (!hasText(form.fullName, 2)) {
+    errors.fullName = 'Укажите ФИО сотрудника.'
+  }
+
+  if (!hasText(form.login)) {
+    errors.login = 'Укажите логин.'
+  } else if (!validateLoginValue(form.login)) {
+    errors.login = 'Логин должен быть 3-32 символа без пробелов.'
+  }
+
+  if (!hasText(form.phone)) {
+    errors.phone = 'Укажите номер телефона.'
+  } else if (!validatePhoneValue(form.phone)) {
+    errors.phone = 'Введите номер в понятном формате, например +7 (900) 000-00-12.'
+  }
+
+  if (!hasText(form.position, 2)) {
+    errors.position = 'Укажите должность.'
+  }
+
+  if (!hasText(form.password)) {
+    errors.password = 'Создайте пароль.'
+  } else if (form.password.trim().length < 8) {
+    errors.password = 'Пароль должен быть не короче 8 символов.'
+  }
+
+  return errors
+}
+
 const makeNotice = (tone: Notice['tone'], text: string): Notice => ({ tone, text })
 
 const getStatusMeta = (status: IdeaStatus) => STATUS_META[status]
@@ -273,6 +395,10 @@ function App() {
   const [registerForm, setRegisterForm] = useState(defaultRegisterForm)
   const [ideaForm, setIdeaForm] = useState(defaultIdeaForm)
   const [employeeForm, setEmployeeForm] = useState(defaultEmployeeForm)
+  const [loginErrors, setLoginErrors] = useState<LoginFormErrors>({})
+  const [registerErrors, setRegisterErrors] = useState<RegisterFormErrors>({})
+  const [ideaErrors, setIdeaErrors] = useState<IdeaFormErrors>({})
+  const [employeeErrors, setEmployeeErrors] = useState<EmployeeFormErrors>({})
   const [actionComment, setActionComment] = useState('')
   const activeSessionTokenRef = useRef<string | null>(session?.token ?? null)
 
@@ -307,6 +433,10 @@ function App() {
       setEmployees([])
       setSelectedIdea(null)
       setSelectedIdeaId(null)
+      setLoginErrors({})
+      setRegisterErrors({})
+      setIdeaErrors({})
+      setEmployeeErrors({})
       return
     }
 
@@ -499,6 +629,54 @@ function App() {
     setActionComment('')
   }
 
+  const clearLoginError = (field: keyof LoginFormErrors) => {
+    setLoginErrors((current) => {
+      if (!current[field]) {
+        return current
+      }
+
+      const next = { ...current }
+      delete next[field]
+      return next
+    })
+  }
+
+  const clearRegisterError = (field: keyof RegisterFormErrors) => {
+    setRegisterErrors((current) => {
+      if (!current[field]) {
+        return current
+      }
+
+      const next = { ...current }
+      delete next[field]
+      return next
+    })
+  }
+
+  const clearIdeaError = (field: keyof IdeaFormErrors) => {
+    setIdeaErrors((current) => {
+      if (!current[field]) {
+        return current
+      }
+
+      const next = { ...current }
+      delete next[field]
+      return next
+    })
+  }
+
+  const clearEmployeeError = (field: keyof EmployeeFormErrors) => {
+    setEmployeeErrors((current) => {
+      if (!current[field]) {
+        return current
+      }
+
+      const next = { ...current }
+      delete next[field]
+      return next
+    })
+  }
+
   const openModal = (nextModal: Exclude<ModalState, null>) => {
     setModalError(null)
 
@@ -506,11 +684,35 @@ function App() {
       setActionComment('')
     }
 
+    if (nextModal.kind === 'login') {
+      setLoginErrors({})
+    }
+
+    if (nextModal.kind === 'register-company') {
+      setRegisterErrors({})
+    }
+
+    if (nextModal.kind === 'create-idea') {
+      setIdeaErrors({})
+    }
+
+    if (nextModal.kind === 'add-employee') {
+      setEmployeeErrors({})
+    }
+
     setModal(nextModal)
   }
 
   const submitLogin: FormEventHandler<HTMLFormElement> = () => {
     void (async () => {
+      const errors = validateLoginForm(loginForm)
+      setLoginErrors(errors)
+
+      if (Object.keys(errors).length > 0) {
+        setModalError(null)
+        return
+      }
+
       setSubmitting(true)
       setModalError(null)
 
@@ -518,6 +720,7 @@ function App() {
         const nextSession = await login(loginForm)
         updateSession(nextSession)
         setLoginForm(defaultLoginForm)
+        setLoginErrors({})
         resetModalState()
         navigateTo('appeals')
         setNotice(makeNotice('success', `Вход выполнен: ${nextSession.user.fullName}`))
@@ -531,6 +734,14 @@ function App() {
 
   const submitRegistration: FormEventHandler<HTMLFormElement> = () => {
     void (async () => {
+      const errors = validateRegisterForm(registerForm)
+      setRegisterErrors(errors)
+
+      if (Object.keys(errors).length > 0) {
+        setModalError(null)
+        return
+      }
+
       setSubmitting(true)
       setModalError(null)
 
@@ -538,6 +749,7 @@ function App() {
         const nextSession = await registerCompany(registerForm)
         updateSession(nextSession)
         setRegisterForm(defaultRegisterForm)
+        setRegisterErrors({})
         resetModalState()
         navigateTo('employees')
         setNotice(makeNotice('success', 'Компания зарегистрирована, можно добавлять сотрудников'))
@@ -556,6 +768,14 @@ function App() {
 
     void (async () => {
       const token = session.token
+      const errors = validateIdeaForm(ideaForm)
+      setIdeaErrors(errors)
+
+      if (Object.keys(errors).length > 0) {
+        setModalError(null)
+        return
+      }
+
       setSubmitting(true)
       setModalError(null)
 
@@ -566,6 +786,7 @@ function App() {
         }
 
         setIdeaForm(defaultIdeaForm)
+        setIdeaErrors({})
         resetModalState()
         setNotice(makeNotice('success', 'Обращение отправлено на модерацию'))
         setSelectedIdeaId(idea.id)
@@ -593,6 +814,14 @@ function App() {
 
     void (async () => {
       const token = session.token
+      const errors = validateEmployeeForm(employeeForm)
+      setEmployeeErrors(errors)
+
+      if (Object.keys(errors).length > 0) {
+        setModalError(null)
+        return
+      }
+
       setSubmitting(true)
       setModalError(null)
 
@@ -603,6 +832,7 @@ function App() {
         }
 
         setEmployeeForm(defaultEmployeeForm)
+        setEmployeeErrors({})
         resetModalState()
         setNotice(makeNotice('success', 'Сотрудник добавлен в компанию'))
         navigateTo('employees')
@@ -1288,22 +1518,44 @@ function App() {
                   <span>Логин</span>
                   <input
                     value={loginForm.login}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      clearLoginError('login')
                       setLoginForm((current) => ({ ...current, login: event.target.value }))
-                    }
+                    }}
                     placeholder="director01"
+                    autoComplete="username"
+                    minLength={3}
+                    maxLength={32}
+                    pattern="[A-Za-z0-9._-]{3,32}"
+                    aria-invalid={Boolean(loginErrors.login)}
+                    aria-describedby={loginErrors.login ? 'login-login-error' : undefined}
                   />
+                  {loginErrors.login && (
+                    <span className="form-field-error" id="login-login-error">
+                      {loginErrors.login}
+                    </span>
+                  )}
                 </label>
                 <label className="form-field">
                   <span>Пароль</span>
                   <input
                     type="password"
                     value={loginForm.password}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      clearLoginError('password')
                       setLoginForm((current) => ({ ...current, password: event.target.value }))
-                    }
+                    }}
                     placeholder="Введите пароль"
+                    autoComplete="current-password"
+                    minLength={8}
+                    aria-invalid={Boolean(loginErrors.password)}
+                    aria-describedby={loginErrors.password ? 'login-password-error' : undefined}
                   />
+                  {loginErrors.password && (
+                    <span className="form-field-error" id="login-password-error">
+                      {loginErrors.password}
+                    </span>
+                  )}
                 </label>
                 {modalError && <p className="modal-error">{modalError}</p>}
               </FormPanel>
@@ -1325,73 +1577,146 @@ function App() {
                   <span>Название компании</span>
                   <input
                     value={registerForm.companyName}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      clearRegisterError('companyName')
                       setRegisterForm((current) => ({ ...current, companyName: event.target.value }))
-                    }
+                    }}
                     placeholder="ООО Ромашка"
+                    minLength={2}
+                    aria-invalid={Boolean(registerErrors.companyName)}
+                    aria-describedby={
+                      registerErrors.companyName ? 'register-companyName-error' : undefined
+                    }
                   />
+                  {registerErrors.companyName && (
+                    <span className="form-field-error" id="register-companyName-error">
+                      {registerErrors.companyName}
+                    </span>
+                  )}
                 </label>
                 <div className="modal-grid">
                   <label className="form-field">
                     <span>ИНН компании</span>
                     <input
                       value={registerForm.companyInn}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        clearRegisterError('companyInn')
                         setRegisterForm((current) => ({ ...current, companyInn: event.target.value }))
-                      }
+                      }}
                       placeholder="7701234567"
+                      inputMode="numeric"
+                      maxLength={12}
+                      pattern="[0-9]{10}|[0-9]{12}"
+                      aria-invalid={Boolean(registerErrors.companyInn)}
+                      aria-describedby={
+                        registerErrors.companyInn ? 'register-companyInn-error' : undefined
+                      }
                     />
+                    {registerErrors.companyInn && (
+                      <span className="form-field-error" id="register-companyInn-error">
+                        {registerErrors.companyInn}
+                      </span>
+                    )}
                   </label>
                   <label className="form-field">
                     <span>Логин директора</span>
                     <input
                       value={registerForm.directorLogin}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        clearRegisterError('directorLogin')
                         setRegisterForm((current) => ({
                           ...current,
                           directorLogin: event.target.value,
                         }))
-                      }
+                      }}
                       placeholder="director01"
+                      autoComplete="username"
+                      minLength={3}
+                      maxLength={32}
+                      pattern="[A-Za-z0-9._-]{3,32}"
+                      aria-invalid={Boolean(registerErrors.directorLogin)}
+                      aria-describedby={
+                        registerErrors.directorLogin ? 'register-directorLogin-error' : undefined
+                      }
                     />
+                    {registerErrors.directorLogin && (
+                      <span className="form-field-error" id="register-directorLogin-error">
+                        {registerErrors.directorLogin}
+                      </span>
+                    )}
                   </label>
                 </div>
                 <label className="form-field">
                   <span>Описание компании</span>
                   <textarea
                     value={registerForm.companyDescription}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      clearRegisterError('companyDescription')
                       setRegisterForm((current) => ({
                         ...current,
                         companyDescription: event.target.value,
                       }))
-                    }
+                    }}
                     placeholder="Коротко опишите компанию и назначение платформы"
+                    maxLength={500}
+                    aria-invalid={Boolean(registerErrors.companyDescription)}
+                    aria-describedby={
+                      registerErrors.companyDescription
+                        ? 'register-companyDescription-error'
+                        : undefined
+                    }
                   />
+                  {registerErrors.companyDescription && (
+                    <span className="form-field-error" id="register-companyDescription-error">
+                      {registerErrors.companyDescription}
+                    </span>
+                  )}
                 </label>
                 <div className="modal-grid">
                   <label className="form-field">
                     <span>ФИО директора</span>
                     <input
                       value={registerForm.directorName}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        clearRegisterError('directorName')
                         setRegisterForm((current) => ({ ...current, directorName: event.target.value }))
-                      }
+                      }}
                       placeholder="Иван Иванов"
+                      minLength={2}
+                      aria-invalid={Boolean(registerErrors.directorName)}
+                      aria-describedby={
+                        registerErrors.directorName ? 'register-directorName-error' : undefined
+                      }
                     />
+                    {registerErrors.directorName && (
+                      <span className="form-field-error" id="register-directorName-error">
+                        {registerErrors.directorName}
+                      </span>
+                    )}
                   </label>
                   <label className="form-field">
                     <span>Должность</span>
                     <input
                       value={registerForm.directorPosition}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        clearRegisterError('directorPosition')
                         setRegisterForm((current) => ({
                           ...current,
                           directorPosition: event.target.value,
                         }))
-                      }
+                      }}
                       placeholder="Генеральный директор"
+                      minLength={2}
+                      aria-invalid={Boolean(registerErrors.directorPosition)}
+                      aria-describedby={
+                        registerErrors.directorPosition ? 'register-directorPosition-error' : undefined
+                      }
                     />
+                    {registerErrors.directorPosition && (
+                      <span className="form-field-error" id="register-directorPosition-error">
+                        {registerErrors.directorPosition}
+                      </span>
+                    )}
                   </label>
                 </div>
                 <div className="modal-grid">
@@ -1399,22 +1724,42 @@ function App() {
                     <span>Телефон</span>
                     <input
                       value={registerForm.phone}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        clearRegisterError('phone')
                         setRegisterForm((current) => ({ ...current, phone: event.target.value }))
-                      }
+                      }}
                       placeholder="+7 (900) 000-00-11"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      aria-invalid={Boolean(registerErrors.phone)}
+                      aria-describedby={registerErrors.phone ? 'register-phone-error' : undefined}
                     />
+                    {registerErrors.phone && (
+                      <span className="form-field-error" id="register-phone-error">
+                        {registerErrors.phone}
+                      </span>
+                    )}
                   </label>
                   <label className="form-field">
                     <span>Пароль</span>
                     <input
                       type="password"
                       value={registerForm.password}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        clearRegisterError('password')
                         setRegisterForm((current) => ({ ...current, password: event.target.value }))
-                      }
+                      }}
                       placeholder="Создайте пароль"
+                      autoComplete="new-password"
+                      minLength={8}
+                      aria-invalid={Boolean(registerErrors.password)}
+                      aria-describedby={registerErrors.password ? 'register-password-error' : undefined}
                     />
+                    {registerErrors.password && (
+                      <span className="form-field-error" id="register-password-error">
+                        {registerErrors.password}
+                      </span>
+                    )}
                   </label>
                 </div>
                 {modalError && <p className="modal-error">{modalError}</p>}
@@ -1434,21 +1779,41 @@ function App() {
                   <span>Заголовок</span>
                   <input
                     value={ideaForm.title}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      clearIdeaError('title')
                       setIdeaForm((current) => ({ ...current, title: event.target.value }))
-                    }
+                    }}
                     placeholder="Например: Поставить кофемашину"
+                    minLength={5}
+                    maxLength={120}
+                    aria-invalid={Boolean(ideaErrors.title)}
+                    aria-describedby={ideaErrors.title ? 'idea-title-error' : undefined}
                   />
+                  {ideaErrors.title && (
+                    <span className="form-field-error" id="idea-title-error">
+                      {ideaErrors.title}
+                    </span>
+                  )}
                 </label>
                 <label className="form-field">
                   <span>Описание идеи</span>
                   <textarea
                     value={ideaForm.description}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      clearIdeaError('description')
                       setIdeaForm((current) => ({ ...current, description: event.target.value }))
-                    }
+                    }}
                     placeholder="Кратко опишите проблему, ожидаемую пользу и контекст."
+                    minLength={10}
+                    maxLength={1000}
+                    aria-invalid={Boolean(ideaErrors.description)}
+                    aria-describedby={ideaErrors.description ? 'idea-description-error' : undefined}
                   />
+                  {ideaErrors.description && (
+                    <span className="form-field-error" id="idea-description-error">
+                      {ideaErrors.description}
+                    </span>
+                  )}
                 </label>
                 <label className="form-field">
                   <span>Тип голосования</span>
@@ -1483,21 +1848,44 @@ function App() {
                     <span>ФИО</span>
                     <input
                       value={employeeForm.fullName}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        clearEmployeeError('fullName')
                         setEmployeeForm((current) => ({ ...current, fullName: event.target.value }))
-                      }
+                      }}
                       placeholder="Иван Иванов"
+                      minLength={2}
+                      aria-invalid={Boolean(employeeErrors.fullName)}
+                      aria-describedby={
+                        employeeErrors.fullName ? 'employee-fullName-error' : undefined
+                      }
                     />
+                    {employeeErrors.fullName && (
+                      <span className="form-field-error" id="employee-fullName-error">
+                        {employeeErrors.fullName}
+                      </span>
+                    )}
                   </label>
                   <label className="form-field">
                     <span>Логин</span>
                     <input
                       value={employeeForm.login}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        clearEmployeeError('login')
                         setEmployeeForm((current) => ({ ...current, login: event.target.value }))
-                      }
+                      }}
                       placeholder="employee01"
+                      autoComplete="username"
+                      minLength={3}
+                      maxLength={32}
+                      pattern="[A-Za-z0-9._-]{3,32}"
+                      aria-invalid={Boolean(employeeErrors.login)}
+                      aria-describedby={employeeErrors.login ? 'employee-login-error' : undefined}
                     />
+                    {employeeErrors.login && (
+                      <span className="form-field-error" id="employee-login-error">
+                        {employeeErrors.login}
+                      </span>
+                    )}
                   </label>
                 </div>
                 <div className="modal-grid">
@@ -1505,11 +1893,21 @@ function App() {
                     <span>Телефон</span>
                     <input
                       value={employeeForm.phone}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        clearEmployeeError('phone')
                         setEmployeeForm((current) => ({ ...current, phone: event.target.value }))
-                      }
+                      }}
                       placeholder="+7 (900) 000-00-12"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      aria-invalid={Boolean(employeeErrors.phone)}
+                      aria-describedby={employeeErrors.phone ? 'employee-phone-error' : undefined}
                     />
+                    {employeeErrors.phone && (
+                      <span className="form-field-error" id="employee-phone-error">
+                        {employeeErrors.phone}
+                      </span>
+                    )}
                   </label>
                 </div>
                 <div className="modal-grid">
@@ -1517,11 +1915,22 @@ function App() {
                     <span>Должность</span>
                     <input
                       value={employeeForm.position}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        clearEmployeeError('position')
                         setEmployeeForm((current) => ({ ...current, position: event.target.value }))
-                      }
+                      }}
                       placeholder="Office Administrator"
+                      minLength={2}
+                      aria-invalid={Boolean(employeeErrors.position)}
+                      aria-describedby={
+                        employeeErrors.position ? 'employee-position-error' : undefined
+                      }
                     />
+                    {employeeErrors.position && (
+                      <span className="form-field-error" id="employee-position-error">
+                        {employeeErrors.position}
+                      </span>
+                    )}
                   </label>
                   <label className="form-field">
                     <span>Роль</span>
@@ -1544,11 +1953,23 @@ function App() {
                   <input
                     type="password"
                     value={employeeForm.password}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      clearEmployeeError('password')
                       setEmployeeForm((current) => ({ ...current, password: event.target.value }))
-                    }
+                    }}
                     placeholder="Создайте временный пароль"
+                    autoComplete="new-password"
+                    minLength={8}
+                    aria-invalid={Boolean(employeeErrors.password)}
+                    aria-describedby={
+                      employeeErrors.password ? 'employee-password-error' : undefined
+                    }
                   />
+                  {employeeErrors.password && (
+                    <span className="form-field-error" id="employee-password-error">
+                      {employeeErrors.password}
+                    </span>
+                  )}
                 </label>
                 {modalError && <p className="modal-error">{modalError}</p>}
               </FormPanel>

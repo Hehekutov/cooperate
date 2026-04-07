@@ -43,10 +43,21 @@
     box-shadow 0.15s ease,
     background-color 0.15s ease;
 }
+.form-field input[aria-invalid='true'],
+.form-field textarea[aria-invalid='true'],
+.form-field select[aria-invalid='true'] {
+  border-color: #b42318;
+  box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.12);
+}
 .form-field textarea {
   min-height: 120px;
   resize: vertical;
   line-height: 1.5;
+}
+.form-field-error {
+  color: #b42318;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 .form-actions {
   display: flex;
