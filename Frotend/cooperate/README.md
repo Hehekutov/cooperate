@@ -11,6 +11,14 @@ Currently, two official plugins are available:
 
 The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
+## API base URL
+
+This frontend expects the backend API to be available through `VITE_API_BASE_URL` in production.
+
+If that variable is missing on Vercel, requests like `POST /api/auth/register-company` will hit the frontend origin instead of the ASP.NET backend and return an HTML page instead of JSON.
+
+For local development, the Vite dev server can proxy `/api` requests to the backend via `VITE_PROXY_TARGET` or `VITE_API_BASE_URL`.
+
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
