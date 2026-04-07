@@ -335,9 +335,14 @@ public sealed class PostgresStateStore : IAppStateStore
                     name = excluded.name,
                     inn = excluded.inn,
                     description = excluded.description,
-                    created_at = excluded.created_at,
                     idea_monthly_limit = excluded.idea_monthly_limit,
                     vote_approval_percent = excluded.vote_approval_percent
+                where
+                    {{_companiesTable}}.name is distinct from excluded.name or
+                    {{_companiesTable}}.inn is distinct from excluded.inn or
+                    {{_companiesTable}}.description is distinct from excluded.description or
+                    {{_companiesTable}}.idea_monthly_limit is distinct from excluded.idea_monthly_limit or
+                    {{_companiesTable}}.vote_approval_percent is distinct from excluded.vote_approval_percent
                 """);
 
             command.Parameters.AddWithValue("id", company.Id);
@@ -368,8 +373,17 @@ public sealed class PostgresStateStore : IAppStateStore
                     position = excluded.position,
                     avatar_url = excluded.avatar_url,
                     password_hash = excluded.password_hash,
-                    is_active = excluded.is_active,
-                    created_at = excluded.created_at
+                    is_active = excluded.is_active
+                where
+                    {{_usersTable}}.company_id is distinct from excluded.company_id or
+                    {{_usersTable}}.full_name is distinct from excluded.full_name or
+                    {{_usersTable}}.login is distinct from excluded.login or
+                    {{_usersTable}}.phone is distinct from excluded.phone or
+                    {{_usersTable}}.role is distinct from excluded.role or
+                    {{_usersTable}}.position is distinct from excluded.position or
+                    {{_usersTable}}.avatar_url is distinct from excluded.avatar_url or
+                    {{_usersTable}}.password_hash is distinct from excluded.password_hash or
+                    {{_usersTable}}.is_active is distinct from excluded.is_active
                 """);
 
             command.Parameters.AddWithValue("id", user.Id);
@@ -448,8 +462,25 @@ public sealed class PostgresStateStore : IAppStateStore
                     director_decision_by = excluded.director_decision_by,
                     director_comment = excluded.director_comment,
                     archived_at = excluded.archived_at,
-                    created_at = excluded.created_at,
                     updated_at = excluded.updated_at
+                where
+                    {{_ideasTable}}.company_id is distinct from excluded.company_id or
+                    {{_ideasTable}}.author_id is distinct from excluded.author_id or
+                    {{_ideasTable}}.voting_type is distinct from excluded.voting_type or
+                    {{_ideasTable}}.title is distinct from excluded.title or
+                    {{_ideasTable}}.description is distinct from excluded.description or
+                    {{_ideasTable}}.status is distinct from excluded.status or
+                    {{_ideasTable}}.moderation_comment is distinct from excluded.moderation_comment or
+                    {{_ideasTable}}.moderated_at is distinct from excluded.moderated_at or
+                    {{_ideasTable}}.moderated_by is distinct from excluded.moderated_by or
+                    {{_ideasTable}}.voting_opened_at is distinct from excluded.voting_opened_at or
+                    {{_ideasTable}}.voting_closed_at is distinct from excluded.voting_closed_at or
+                    {{_ideasTable}}.director_review_requested_at is distinct from excluded.director_review_requested_at or
+                    {{_ideasTable}}.director_decision_at is distinct from excluded.director_decision_at or
+                    {{_ideasTable}}.director_decision_by is distinct from excluded.director_decision_by or
+                    {{_ideasTable}}.director_comment is distinct from excluded.director_comment or
+                    {{_ideasTable}}.archived_at is distinct from excluded.archived_at or
+                    {{_ideasTable}}.updated_at is distinct from excluded.updated_at
                 """);
 
             command.Parameters.AddWithValue("id", idea.Id);
@@ -500,8 +531,11 @@ public sealed class PostgresStateStore : IAppStateStore
                 on conflict (id) do update set
                     idea_id = excluded.idea_id,
                     user_id = excluded.user_id,
-                    value = excluded.value,
-                    created_at = excluded.created_at
+                    value = excluded.value
+                where
+                    {{_votesTable}}.idea_id is distinct from excluded.idea_id or
+                    {{_votesTable}}.user_id is distinct from excluded.user_id or
+                    {{_votesTable}}.value is distinct from excluded.value
                 """);
 
             command.Parameters.AddWithValue("id", vote.Id);
@@ -521,8 +555,11 @@ public sealed class PostgresStateStore : IAppStateStore
                 on conflict (id) do update set
                     user_id = excluded.user_id,
                     token = excluded.token,
-                    created_at = excluded.created_at,
                     expires_at = excluded.expires_at
+                where
+                    {{_sessionsTable}}.user_id is distinct from excluded.user_id or
+                    {{_sessionsTable}}.token is distinct from excluded.token or
+                    {{_sessionsTable}}.expires_at is distinct from excluded.expires_at
                 """);
 
             command.Parameters.AddWithValue("id", session.Id);

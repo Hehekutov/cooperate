@@ -10,6 +10,8 @@
     "typecheck": "npm --prefix cooperate run typecheck",
     "lint": "npm --prefix cooperate run lint",
     "preview": "npm --prefix cooperate run preview",
+    "e2e": "npm --prefix cooperate run e2e",
+    "e2e:install-browser": "npm --prefix cooperate run e2e:install-browser",
     "install:workspace": "npm --prefix cooperate install"
   }
 }
